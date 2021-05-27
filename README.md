@@ -5,6 +5,7 @@
 ## Introduction
 
 This repository contains a moded version of PyTorch YOLOv5 (https://github.com/ultralytics/yolov5) and Yolov5_DeepSort_Pytorch (https://github.com/mikel-brostrom/Yolov5_DeepSort_Pytorch).
+I'll update my code as my study progresses.
 
 ## Description
 
