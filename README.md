@@ -4,7 +4,7 @@
 
 ## Introduction
 
-This repository contains a moded version of PyTorch YOLOv5 (https://github.com/ultralytics/yolov5). It filters out every detection that is not a person. The detections of persons are then passed to a Deep Sort algorithm (https://github.com/ZQPei/deep_sort_pytorch) which tracks the persons. The reason behind the fact that it just tracks persons is that the deep association metric is trained on a person ONLY datatset.
+This repository contains a moded version of PyTorch YOLOv5 (https://github.com/ultralytics/yolov5) and Yolov5_DeepSort_Pytorch (https://github.com/mikel-brostrom/Yolov5_DeepSort_Pytorch).
 
 ## Description
 
@@ -16,6 +16,10 @@ https://arxiv.org/abs/1703.07402
 https://arxiv.org/pdf/2004.10934.pdf
 
 ## Requirements
+
+Frist of all, You have to follow tutorial of https://github.com/ultralytics/yolov5.
+
+After that, follow this paper.
 
 Python 3.8 or later with all requirements.txt dependencies installed, including torch>=1.7. To install run:
 
