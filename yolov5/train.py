@@ -7,6 +7,8 @@ import time
 from copy import deepcopy
 from pathlib import Path
 from threading import Thread
+from warnings import warn
+from glob import glob
 
 import numpy as np
 import torch.distributed as dist
@@ -20,6 +22,7 @@ from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+from sklearn.model_selection import train_test_split
 
 import test  # import test.py to get mAP after each epoch
 from models.experimental import attempt_load
@@ -35,11 +38,13 @@ from utils.plots import plot_images, plot_labels, plot_results, plot_evolution
 from utils.torch_utils import ModelEMA, select_device, intersect_dicts, torch_distributed_zero_first, is_parallel
 from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
 
+from utils.autoanchor import kmean_anchors;
 logger = logging.getLogger(__name__)
 
 
 def train(hyp, opt, device, tb_writer=None):
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
+    pause()
     save_dir, epochs, batch_size, total_batch_size, weights, rank = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.total_batch_size, opt.weights, opt.global_rank
 
@@ -85,14 +90,14 @@ def train(hyp, opt, device, tb_writer=None):
         with torch_distributed_zero_first(rank):
             attempt_download(weights)  # download if not found locally
         ckpt = torch.load(weights, map_location=device)  # load checkpoint
-        model = Model(opt.cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        model = Model(opt.cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors'), mod_anchors = mod_anchors).to(device)  # create
         exclude = ['anchor'] if (opt.cfg or hyp.get('anchors')) and not opt.resume else []  # exclude keys
         state_dict = ckpt['model'].float().state_dict()  # to FP32
         state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(state_dict, strict=False)  # load
         logger.info('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weights))  # report
     else:
-        model = Model(opt.cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        model = Model(opt.cfg, ch=3, nc=nc, anchors=hyp.get('anchors'), mod_anchors = mod_anchors).to(device)  # create
     with torch_distributed_zero_first(rank):
         check_dataset(data_dict)  # check
     train_path = data_dict['train']
@@ -450,16 +455,85 @@ def train(hyp, opt, device, tb_writer=None):
     torch.cuda.empty_cache()
     return results
 
+# 엔터 누르기 전까지 잠깐 멈춤
+def pause():
+    programPause = input("Press the <ENTER> key to continue...")
+
 
 if __name__ == '__main__':
+
+    # 훈련 전에 확인할 것들
+    '''
+    1. ./dataset/ 폴더 내에 이미지와 텍스트파일이 잘들어있는지 확인
+     - ./yolov5/dataset/파일넘버/*.jpg, *.txt 형식
+
+    2. data.yaml 파일에서 클래스 수, 클래스 명이 잘 들어갔는지 확인
+     - ./yolov5/data 폴더 내에 있음
+     - 경로는 손대지 마시오
+
+    3. train_result 폴더에 결과 저장됨(웨이트, 그래프 포함)
+    '''
+    
+    # 여기에 각 파라미터 정의하고 실행
+    model_size = 'yolov5s'
+    exp_num = '20210531' # 실험 이름
+
+    model_weights = './weights/'+model_size+'.pt' # 사전훈련의 베이스로 사용한 모델 : Pre-Trained 모델 파일 경로 (pt 형식 파일)
+    epochs = 2500 # 에폭 수 : 학습 몇 회 해볼건지
+    batch_size = 64 # 배치 사이즈 값 : 컴퓨터의 성능에 따라 선택
+    img_size = 800 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
+    train_result_folder = './train_result' # 훈련된 데이터들이 들어갈 장소
+    hyp_custom = 'data/hyp.custom.yaml' # 하이퍼파라미터 커스텀 버전 (기본 : 'data/hyp.scratch.yaml')
+    data_yaml = 'data/CustomData.yaml'
+    cfg = './models/'+model_size +'.yaml' #yolov5 아키텍처 파일 경로 
+
+    # train.txt, val.txt 파일 생성
+    dataset = os.listdir('./dataset/')
+    img_list = []
+    for data in dataset:
+        img = glob(os.getcwd() + '/dataset/{}/*.jpg'.format(data))
+        img_list.extend(img)
+    train_img_list, val_img_list = train_test_split(img_list, test_size=0.2, random_state=2000)
+    with open('./data/train.txt', 'w+') as f:
+        f.write('\n'.join(train_img_list) + '\n')
+    with open('./data/val.txt', 'w+') as f:
+        f.write('\n'.join(val_img_list) + '\n') 
+
+    # 훈련할 데이터의 앵커 사이즈 도출(path : data yaml 파일 경로, n : 생성할 앵커박스 갯수, img_size : 이미지 크기, thr, gen, verbose)
+    anchors_size = kmean_anchors(path='./data/CustomData.yaml', n=9, img_size=img_size, thr=4.0, gen=1000, verbose=True)
+    mod_anchors = [[anchors_size[0][0], anchors_size[0][1], anchors_size[1][0], anchors_size[1][1], anchors_size[2][0], anchors_size[2][1]],
+           [anchors_size[3][0], anchors_size[3][1], anchors_size[4][0], anchors_size[4][1], anchors_size[5][0], anchors_size[5][1]],
+           [anchors_size[6][0], anchors_size[6][1], anchors_size[7][0], anchors_size[7][1], anchors_size[8][0], anchors_size[8][1]]]
+    # # '.yolov5/models/+model_size+custom.yaml'의 앵커 사이즈 변경
+    # cfg = './models/'+model_size +'.yaml' #yolov5 아키텍처 파일 경로 
+    # with open(cfg) as f:
+    #     cfg_base = yaml.safe_load(f)
+
+    # for k, v in cfg_base.items():
+    #     if k == 'anchors':
+    #         v[0] = [anchors_size[0][0], anchors_size[0][1], anchors_size[1][0], anchors_size[1][1], anchors_size[2][0], anchors_size[2][1]]
+    #         v[1] = [anchors_size[3][0], anchors_size[3][1], anchors_size[4][0], anchors_size[4][1], anchors_size[5][0], anchors_size[5][1]]
+    #         v[2] = [anchors_size[6][0], anchors_size[6][1], anchors_size[7][0], anchors_size[7][1], anchors_size[8][0], anchors_size[8][1]]
+
+    # cfg_modify = cfg_base
+
+    # cfg_custom = './models/'+model_size +'_custom2.yaml' #yolov5 custom 아키텍처 파일 경로 
+    # with open(cfg_custom, 'w') as f:
+    #     #ruamel.yaml.dump(cfg_modify, f, sys.stdout, Dumper=ruamel.yaml.RoundTripDumper)
+    #     yaml.dump(cfg_modify, f)
+
+    # print(cfg_modify)
+    # print('.yolov5/models/+model_size+custom.yaml 파일에서 위 내용을 보고 변경하고 엔터를 누르시오')
+    # pause()
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
-    parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
-    parser.add_argument('--data', type=str, default='data/coco128.yaml', help='data.yaml path')
-    parser.add_argument('--hyp', type=str, default='data/hyp.scratch.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=300)
-    parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
-    parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='[train, test] image sizes')
+    parser.add_argument('--weights', type=str, default=model_weights, help='initial weights path')
+    parser.add_argument('--cfg', type=str, default=cfg, help='model.yaml path')
+    parser.add_argument('--data', type=str, default=data_yaml, help='data.yaml path')
+    parser.add_argument('--hyp', type=str, default=hyp_custom, help='hyperparameters path')
+    parser.add_argument('--epochs', type=int, default=epochs)
+    parser.add_argument('--batch-size', type=int, default=batch_size, help='total batch size for all GPUs')
+    parser.add_argument('--img-size', nargs='+', type=int, default=[img_size, img_size], help='[train, test] image sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
@@ -476,9 +550,9 @@ if __name__ == '__main__':
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
-    parser.add_argument('--project', default='runs/train', help='save to project/name')
+    parser.add_argument('--project', default=train_result_folder, help='save to project/name')
     parser.add_argument('--entity', default=None, help='W&B entity')
-    parser.add_argument('--name', default='exp', help='save to project/name')
+    parser.add_argument('--name', default=exp_num, help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
     parser.add_argument('--linear-lr', action='store_true', help='linear LR')

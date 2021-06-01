@@ -70,7 +70,7 @@ class Detect(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None, anchors=None):  # model, input channels, number of classes
+    def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None, anchors=None, mod_anchors = None):  # model, input channels, number of classes
         super(Model, self).__init__()
         if isinstance(cfg, dict):
             self.yaml = cfg  # model dict
@@ -88,11 +88,14 @@ class Model(nn.Module):
         if anchors:
             logger.info(f'Overriding model.yaml anchors with anchors={anchors}')
             self.yaml['anchors'] = round(anchors)  # override yaml value
-        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
+        if np.any(mod_anchors != None):
+            logger.info(f'Overriding model.yaml anchors with anchors={mod_anchors}')
+            self.yaml['anchors'] = mod_anchors  # override yaml value
+        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, svelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
         self.inplace = self.yaml.get('inplace', True)
         # logger.info([x.shape for x in self.forward(torch.zeros(1, ch, 64, 64))])
-
+        
         # Build strides, anchors
         m = self.model[-1]  # Detect()
         if isinstance(m, Detect):
