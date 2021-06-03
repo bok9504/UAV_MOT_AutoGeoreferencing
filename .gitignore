@@ -90,6 +90,7 @@ wandb/
 .installed.cfg
 *.egg
 yolov5/dataset/
+yolov5/train_result/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
