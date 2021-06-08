@@ -40,11 +40,13 @@ def compute_color_for_labels(label):
     """
     Simple function that adds fixed color depending on the class
     """
+    label = (label + 1) * 2
     color = [int((p * (label ** 2 - label + 1)) % 255) for p in palette]
     return tuple(color)
 
 
-def draw_boxes(img, bbox, identities=None, offset=(0, 0)):
+def draw_boxes(img, bbox, names=[], cls_id=None, identities=None, confs=None,\
+    yolo_swch=None, deepsort_swch=None, vehtrk_swch=None, speed_swch=None, offset=(0, 0)):
     for i, box in enumerate(bbox):
         x1, y1, x2, y2 = [int(i) for i in box]
         x1 += offset[0]
@@ -52,21 +54,29 @@ def draw_boxes(img, bbox, identities=None, offset=(0, 0)):
         y1 += offset[1]
         y2 += offset[1]
         # box text and bar
+        clsss = int(cls_id[i][0]) if cls_id is not None else 0
         id = int(identities[i]) if identities is not None else 0
-        color = compute_color_for_labels(id)
-        label = '{}{:d}'.format("", id)
+        confss = float(confs[i][0])*100 if confs is not None else 0
+        color = compute_color_for_labels(clsss)
+
+        if yolo_swch:
+            label = '{} {:.2f}%'.format(names[clsss], confss)
+
+        if deepsort_swch:
+            label = '{}-{}'.format(names[clsss], id)
+
         t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 2, 2)[0]
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
         cv2.rectangle(
-            img, (x1, y1), (x1 + t_size[0] + 3, y1 + t_size[1] + 4), color, -1)
-        cv2.putText(img, label, (x1, y1 +
-                                 t_size[1] + 4), cv2.FONT_HERSHEY_PLAIN, 2, [255, 255, 255], 2)
+            img, (x1 + t_size[0] + 3, y1 - (t_size[1] + 4)), (x1, y1), color, -1)
+        cv2.putText(img, label, (x1, y1), cv2.FONT_HERSHEY_PLAIN, 2, [255, 255, 255], 2)
     return img
-
 
 def detect(opt):
     out, source, weights, view_vid, save_vid, save_txt, imgsz = \
         opt.output, opt.source, opt.weights, opt.view_vid, opt.save_vid, opt.save_txt, opt.img_size
+    yolo_swch, deepsort_swch, vehtrk_swch, speed_swch, volume_swch, line_swch, density_swch, headway_swch = \
+        opt.yolo_swch, opt.deepsort_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.line_swch, opt.density_swch, opt.headway_swch
     webcam = source == '0' or source.startswith(
         'rtsp') or source.startswith('http') or source.endswith('.txt')
 
@@ -95,7 +105,7 @@ def detect(opt):
         model.half()  # to FP16
 
     # Set Dataloader
-    vid_path, vid_writer = None, None
+    vid_path, vid_writer = None, None 
     # Check if environment supports image displays
     if view_vid:
         view_vid = check_imshow()
@@ -154,26 +164,46 @@ def detect(opt):
                     s += '%g %ss, ' % (n, names[int(c)])  # add to string
 
                 bbox_xywh = []
+                bbox_xyxy = []
                 confs = []
+                clss = []
 
                 # Adapt detections to deep sort input format
                 for *xyxy, conf, cls in det:
                     x_c, y_c, bbox_w, bbox_h = bbox_rel(*xyxy)
                     obj = [x_c, y_c, bbox_w, bbox_h]
+                    objxyxy = [x_c-int(bbox_w/2), y_c-int(bbox_h/2), x_c+int(bbox_w/2), y_c+int(bbox_h/2)]
                     bbox_xywh.append(obj)
+                    bbox_xyxy.append(objxyxy)
                     confs.append([conf.item()])
+                    clss.append([cls.item()])
+                
+                if yolo_swch:
+                    cls_id = clss
+                    draw_boxes(im0, bbox_xyxy, names, clss, cls_id=confs, yolo_swch=yolo_swch)
 
                 xywhs = torch.Tensor(bbox_xywh)
                 confss = torch.Tensor(confs)
+                cls_ids = torch.Tensor(clss)
 
                 # Pass detections to deepsort
-                outputs = deepsort.update(xywhs, confss, im0)
+                outputs = deepsort.update(xywhs, confss, cls_ids, im0)
+                """
+                # outputs shape
+
+                [[박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
+                [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
+                [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
+                [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
+                ...]
+                """
 
                 # draw boxes for visualization
-                if len(outputs) > 0:
+                if deepsort_swch and len(outputs) > 0:
                     bbox_xyxy = outputs[:, :4]
+                    cls_id = outputs[:,4:5]
                     identities = outputs[:, -1]
-                    draw_boxes(im0, bbox_xyxy, identities)
+                    draw_boxes(im0, bbox_xyxy, names, cls_id, identities=identities, deepsort_swch=deepsort_swch)
 
                 # Write MOT compliant results to file
                 if save_txt and len(outputs) != 0:
@@ -225,39 +255,74 @@ def detect(opt):
 
 
 if __name__ == '__main__':
+
+    # YoloV5 + DeepSORT 트래킹 수행
+
+    # 표출 기능 선택
+    yolo_switch = False              # 차량 객체 검지 표출
+    deepsort_switch = True          # 차량 객체 추적 표출
+                                    # - yolo와 deepsort는 둘중 하나만 True 선택 (중복선택 시 중복된 결과물 표출)
+    VehTrack_switch = False         # 차량 주행궤적 추출
+    speed_switch = False            # 차량별 속도 추출
+    volume_switch = False           # 교통량 추출
+    line_switch = False             # 차선 추출
+    density_switch = False          # 밀도 추출
+    headway_switch = False          # 차두간격 추출
+
+    # 트래킹 파라미터 설정
+    test_Video = 'DJI_0167' # 테스트 영상 이름
+    exp_num = '20210608' # 실험 이름
+
+    weights_path = 'yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
+    test_Video_path = 'input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
+    output_path = 'output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
+
+    img_size = 800 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
+    conf_thres = 0.4  # 신뢰도 문턱값(default : 0.4) : 해당 수치 중복도 이상은 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
+    iou_thres = 0.5  # iou 문턱값(default : 0.5) : 검출 박스의 iou(교집합) 정도
+    classes_type = [0, 1, 2] # 데이터셋 및 학습된 모델 클래스 종류
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str,
-                        default='yolov5/weights/yolov5s.pt', help='model.pt path')
+                        default=weights_path, help='model.pt path')
     # file/folder, 0 for webcam
     parser.add_argument('--source', type=str,
-                        default='inference/images', help='source')
-    parser.add_argument('--output', type=str, default='inference/output',
+                        default=test_Video_path, help='source')
+    parser.add_argument('--output', type=str, default=output_path,
                         help='output folder')  # output folder
-    parser.add_argument('--img-size', type=int, default=640,
+    parser.add_argument('--img-size', type=int, default=img_size,
                         help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float,
-                        default=0.4, help='object confidence threshold')
+                        default=conf_thres, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float,
-                        default=0.5, help='IOU threshold for NMS')
+                        default=iou_thres, help='IOU threshold for NMS')
     parser.add_argument('--fourcc', type=str, default='mp4v',
                         help='output video codec (verify ffmpeg support)')
-    parser.add_argument('--device', default='',
+    parser.add_argument('--device', default='0',
                         help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-vid', action='store_false',
                         help='display results')
-    parser.add_argument('--save-vid', action='store_true',
+    parser.add_argument('--save-vid', action='store_true', default=output_path,
                         help='display results')
     parser.add_argument('--save-txt', action='store_true',
                         help='save results to *.txt')
     # class 0 is person
     parser.add_argument('--classes', nargs='+', type=int,
-                        default=[0], help='filter by class')
+                        default=classes_type, help='filter by class')
     parser.add_argument('--agnostic-nms', action='store_true',
                         help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true',
                         help='augmented inference')
     parser.add_argument("--config_deepsort", type=str,
                         default="deep_sort_pytorch/configs/deep_sort.yaml")
+    parser.add_argument("--yolo_swch", default=yolo_switch, help='Yolo on & off')
+    parser.add_argument("--deepsort_swch", default=deepsort_switch, help='DeepSORT on & off')
+    parser.add_argument("--vehtrk_swch", default=VehTrack_switch, help='Vehicle Track on & off')
+    parser.add_argument("--speed_swch", default=speed_switch, help='Speed on & off')
+    parser.add_argument("--volume_swch", default=volume_switch, help='Volume on & off')
+    parser.add_argument("--line_swch", default=line_switch, help='Line on & off')
+    parser.add_argument("--density_swch", default=density_switch, help='Density on & off')
+    parser.add_argument("--headway_swch", default=headway_switch, help='Headway on & off')
     args = parser.parse_args()
     args.img_size = check_img_size(args.img_size)
     print(args)
