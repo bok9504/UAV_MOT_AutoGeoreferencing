@@ -13,6 +13,7 @@ import os
 import platform
 import shutil
 import time
+import numpy as np
 from pathlib import Path
 import cv2
 import torch
@@ -23,7 +24,7 @@ import torch.backends.cudnn as cudnn
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
 
 
-def bbox_rel(*xyxy):
+def bbox_ccwh(*xyxy):
     """" Calculates the relative bounding box from absolute pixel values. """
     bbox_left = min([xyxy[0].item(), xyxy[2].item()])
     bbox_top = min([xyxy[1].item(), xyxy[3].item()])
@@ -35,6 +36,13 @@ def bbox_rel(*xyxy):
     h = bbox_h
     return x_c, y_c, w, h
 
+def bbox_ltrd(*xyxy):
+    """" Calculates the relative bounding box from absolute pixel values. """
+    bbox_left = min([xyxy[0].item(), xyxy[2].item()])
+    bbox_top = min([xyxy[1].item(), xyxy[3].item()])
+    bbox_right = max([xyxy[0].item(), xyxy[2].item()])
+    bbox_down = max([xyxy[1].item(), xyxy[3].item()])
+    return bbox_left, bbox_top, bbox_right, bbox_down
 
 def compute_color_for_labels(label):
     """
@@ -44,33 +52,57 @@ def compute_color_for_labels(label):
     color = [int((p * (label ** 2 - label + 1)) % 255) for p in palette]
     return tuple(color)
 
+class Obj_info:
+    def __init__(self, bbox, cls):
+        self.bbox = bbox
+        self.cls = cls
 
-def draw_boxes(img, bbox, names=[], cls_id=None, identities=None, confs=None,\
-    yolo_swch=None, deepsort_swch=None, vehtrk_swch=None, speed_swch=None, offset=(0, 0)):
-    for i, box in enumerate(bbox):
-        x1, y1, x2, y2 = [int(i) for i in box]
-        x1 += offset[0]
-        x2 += offset[0]
-        y1 += offset[1]
-        y2 += offset[1]
-        # box text and bar
-        clsss = int(cls_id[i][0]) if cls_id is not None else 0
-        id = int(identities[i]) if identities is not None else 0
-        confss = float(confs[i][0])*100 if confs is not None else 0
-        color = compute_color_for_labels(clsss)
+class Detected_Obj(Obj_info):
+    def __init__(self, bbox, cls, confs):
+        Obj_info.__init__(self, bbox, cls)
+        self.confs = confs
 
-        if yolo_swch:
-            label = '{} {:.2f}%'.format(names[clsss], confss)
+    def draw_box(self, img, offset=(0,0)):
+        for i, box in enumerate(self.bbox):
+            x1, y1, x2, y2 = [int(i) for i in box]
+            x1 += offset[0]
+            x2 += offset[0]
+            y1 += offset[1]
+            y2 += offset[1]
+            clsss = int(self.cls[i][0])
+            confss = float(self.confs[i][0])*100
+            color = compute_color_for_labels(clsss)
+            label = '{} {:.2f}%'.format(namess[clsss], confss)
+            t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 1, 1)[0]
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
+            cv2.rectangle(
+                img, (x1 + t_size[0] + 3, y1 - (t_size[1] + 4)), (x1, y1), color, -1)
+            cv2.putText(img, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [255,255,255], 2)
+        return img
 
-        if deepsort_swch:
-            label = '{}-{}'.format(names[clsss], id)
+class Tracked_Obj(Obj_info):
+    def __init__(self, bbox, cls, id):
+        Obj_info.__init__(self, bbox, cls)
+        self.id = id
 
-        t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 2, 2)[0]
-        cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
-        cv2.rectangle(
-            img, (x1 + t_size[0] + 3, y1 - (t_size[1] + 4)), (x1, y1), color, -1)
-        cv2.putText(img, label, (x1, y1), cv2.FONT_HERSHEY_PLAIN, 2, [255, 255, 255], 2)
-    return img
+    def draw_box(self, img, offset=(0,0)):
+        for i, box in enumerate(self.bbox):
+            x1, y1, x2, y2 = [int(i) for i in box]
+            x1 += offset[0]
+            x2 += offset[0]
+            y1 += offset[1]
+            y2 += offset[1]
+            clsss = int(self.cls[i][0])
+            ids = int(self.id[i])
+            color = compute_color_for_labels(clsss)
+            label = '{}-{}'.format(namess[clsss], ids)
+            t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 1, 1)[0]
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
+            cv2.rectangle(
+                img, (x1 + t_size[0] + 3, y1 - (t_size[1] + 4)), (x1, y1), color, -1)
+            cv2.putText(img, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [255,255,255], 2)
+        return img
+
 
 def detect(opt):
     out, source, weights, view_vid, save_vid, save_txt, imgsz = \
@@ -117,7 +149,8 @@ def detect(opt):
         dataset = LoadImages(source, img_size=imgsz)
 
     # Get names and colors
-    names = model.module.names if hasattr(model, 'module') else model.names
+    global namess
+    namess = model.module.names if hasattr(model, 'module') else model.names
 
     # Run inference
     if device.type != 'cpu':
@@ -161,7 +194,7 @@ def detect(opt):
                 # Print results
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
-                    s += '%g %ss, ' % (n, names[int(c)])  # add to string
+                    s += '%g %ss, ' % (n, namess[int(c)])  # add to string
 
                 bbox_xywh = []
                 bbox_xyxy = []
@@ -170,17 +203,18 @@ def detect(opt):
 
                 # Adapt detections to deep sort input format
                 for *xyxy, conf, cls in det:
-                    x_c, y_c, bbox_w, bbox_h = bbox_rel(*xyxy)
+                    x_c, y_c, bbox_w, bbox_h = bbox_ccwh(*xyxy)
+                    x_l, y_t, x_r, y_d = bbox_ltrd(*xyxy)
                     obj = [x_c, y_c, bbox_w, bbox_h]
-                    objxyxy = [x_c-int(bbox_w/2), y_c-int(bbox_h/2), x_c+int(bbox_w/2), y_c+int(bbox_h/2)]
+                    objxyxy = [x_l, y_t, x_r, y_d]
                     bbox_xywh.append(obj)
                     bbox_xyxy.append(objxyxy)
                     confs.append([conf.item()])
                     clss.append([cls.item()])
-                
+
                 if yolo_swch:
-                    cls_id = clss
-                    draw_boxes(im0, bbox_xyxy, names, clss, cls_id=confs, yolo_swch=yolo_swch)
+                    detect_result = Detected_Obj(bbox_xyxy, clss, confs)
+                    detect_result.draw_box(im0)
 
                 xywhs = torch.Tensor(bbox_xywh)
                 confss = torch.Tensor(confs)
@@ -203,7 +237,8 @@ def detect(opt):
                     bbox_xyxy = outputs[:, :4]
                     cls_id = outputs[:,4:5]
                     identities = outputs[:, -1]
-                    draw_boxes(im0, bbox_xyxy, names, cls_id, identities=identities, deepsort_swch=deepsort_swch)
+                    track_result = Tracked_Obj(bbox_xyxy, cls_id, identities)
+                    track_result.draw_box(im0)
 
                 # Write MOT compliant results to file
                 if save_txt and len(outputs) != 0:
@@ -259,8 +294,8 @@ if __name__ == '__main__':
     # YoloV5 + DeepSORT 트래킹 수행
 
     # 표출 기능 선택
-    yolo_switch = False              # 차량 객체 검지 표출
-    deepsort_switch = True          # 차량 객체 추적 표출
+    yolo_switch = True              # 차량 객체 검지 표출
+    deepsort_switch = False          # 차량 객체 추적 표출
                                     # - yolo와 deepsort는 둘중 하나만 True 선택 (중복선택 시 중복된 결과물 표출)
     VehTrack_switch = False         # 차량 주행궤적 추출
     speed_switch = False            # 차량별 속도 추출
