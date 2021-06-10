@@ -13,7 +13,6 @@ import os
 import platform
 import shutil
 import time
-import numpy as np
 from pathlib import Path
 import cv2
 import torch
@@ -103,6 +102,15 @@ class Tracked_Obj(Obj_info):
             cv2.putText(img, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [255,255,255], 2)
         return img
 
+    def Visualize_Track(self, img, pts):
+        for i, box in enumerate(self.bbox):
+            center = (int(((box[0]) + (box[2]))/2), int(((box[1]) + (box[3]))/2))
+            pts[self.id[i]].append(center)
+            for j in range(1, len(pts[self.id[i]])):
+                if pts[self.id[i]][j-1] is None or pts[self.id[i]][j] is None:
+                    continue
+                cv2.line(img, (pts[self.id[i]][j-1]), (pts[self.id[i]][j]), (0,255,255), 5)
+        return img
 
 def detect(opt):
     out, source, weights, view_vid, save_vid, save_txt, imgsz = \
@@ -160,6 +168,9 @@ def detect(opt):
     save_path = str(Path(out))
     txt_path = str(Path(out)) + '/results.txt'
 
+    from _collections import deque
+    pts = [deque(maxlen=100) for _ in range(10000)]
+
     for frame_idx, (path, img, im0s, vid_cap) in enumerate(dataset):
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -212,6 +223,7 @@ def detect(opt):
                     confs.append([conf.item()])
                     clss.append([cls.item()])
 
+                # draw detected boxes for visualization
                 if yolo_swch:
                     detect_result = Detected_Obj(bbox_xyxy, clss, confs)
                     detect_result.draw_box(im0)
@@ -232,13 +244,17 @@ def detect(opt):
                 ...]
                 """
 
-                # draw boxes for visualization
+                # draw tracked boxes for visualization
                 if deepsort_swch and len(outputs) > 0:
                     bbox_xyxy = outputs[:, :4]
                     cls_id = outputs[:,4:5]
                     identities = outputs[:, -1]
                     track_result = Tracked_Obj(bbox_xyxy, cls_id, identities)
                     track_result.draw_box(im0)
+
+                    # draw vehicle trajectory for visualization
+                    if vehtrk_swch:
+                        track_result.Visualize_Track(im0, pts)
 
                 # Write MOT compliant results to file
                 if save_txt and len(outputs) != 0:
@@ -294,10 +310,10 @@ if __name__ == '__main__':
     # YoloV5 + DeepSORT 트래킹 수행
 
     # 표출 기능 선택
-    yolo_switch = True              # 차량 객체 검지 표출
-    deepsort_switch = False          # 차량 객체 추적 표출
+    yolo_switch = False              # 차량 객체 검지 표출
+    deepsort_switch = True          # 차량 객체 추적 표출
                                     # - yolo와 deepsort는 둘중 하나만 True 선택 (중복선택 시 중복된 결과물 표출)
-    VehTrack_switch = False         # 차량 주행궤적 추출
+    VehTrack_switch = True         # 차량 주행궤적 추출
     speed_switch = False            # 차량별 속도 추출
     volume_switch = False           # 교통량 추출
     line_switch = False             # 차선 추출
