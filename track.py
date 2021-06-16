@@ -8,6 +8,9 @@ from yolov5.utils.general import check_img_size, non_max_suppression, scale_coor
 from yolov5.utils.torch_utils import select_device, time_synchronized
 from deep_sort_pytorch.utils.parser import get_config
 from deep_sort_pytorch.deep_sort import DeepSort
+
+from img_matching.crop_img import create_control_img
+
 import argparse
 import os
 import platform
@@ -310,11 +313,11 @@ if __name__ == '__main__':
     # YoloV5 + DeepSORT 트래킹 수행
 
     # 표출 기능 선택
-    yolo_switch = False              # 차량 객체 검지 표출
+    yolo_switch = False             # 차량 객체 검지 표출
     deepsort_switch = True          # 차량 객체 추적 표출
                                     # - yolo와 deepsort는 둘중 하나만 True 선택 (중복선택 시 중복된 결과물 표출)
-    VehTrack_switch = True         # 차량 주행궤적 추출
-    speed_switch = False            # 차량별 속도 추출
+    VehTrack_switch = True          # 차량 주행궤적 추출
+    speed_switch = True            # 차량별 속도 추출
     volume_switch = False           # 교통량 추출
     line_switch = False             # 차선 추출
     density_switch = False          # 밀도 추출
@@ -377,6 +380,29 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.img_size = check_img_size(args.img_size)
     print(args)
+
+    if speed_switch or volume_switch or line_switch:
+        test_Video_folder = 'img_matching/control_img/' + test_Video
+        first_frm = test_Video_folder + '/{}.jpg'.format(test_Video)
+        if os.path.exists(test_Video_folder):
+            print()
+            create_new_ctlimg = input('If you wanna create new control image, Write yes : ')
+            if create_new_ctlimg =='yes':
+                create_control_img(first_frm)
+            else:
+                pass
+        else:
+            os.mkdir(test_Video_folder)
+            vidcap = cv2.VideoCapture(test_Video_path)
+            while(vidcap.isOpened()):
+                ret, image = vidcap.read()
+                cv2.imwrite(first_frm, image)
+                break
+            print(first_frm)
+            create_control_img(first_frm)
+
+
+
 
     with torch.no_grad():
         detect(args)
