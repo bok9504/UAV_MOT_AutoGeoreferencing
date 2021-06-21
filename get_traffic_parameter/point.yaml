@@ -1,0 +1,19 @@
+frm_point:
+  0: !!python/tuple [377, 671]
+  1: !!python/tuple [200, 1005]
+  2: !!python/tuple [1664, 1052]
+  3: !!python/tuple [1782, 713]
+  4: !!python/tuple [3477, 639]
+  5: !!python/tuple [3130, 966]
+
+geo_point:
+  0: !!python/tuple [392732.790, 294638.880]
+  1: !!python/tuple [392762.722, 294631.785]
+  2: !!python/tuple [392737.117, 294752.735]
+  3: !!python/tuple [392707.846, 294755.055]
+  4: !!python/tuple [392669.961, 294886.018]
+  5: !!python/tuple [392702.601, 294865.031]
+
+counter:
+  0: [!!python/tuple [488,589], !!python/tuple [486,859]]
+  1: [!!python/tuple [3463,795], !!python/tuple [3487,1093]]

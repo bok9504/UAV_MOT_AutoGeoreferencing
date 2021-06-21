@@ -1,17 +1,22 @@
-import argparse
 import cv2
 import os
 
 refPt = []
 cap_img = []
-
+'''
+# Control Image를 생성하는 GUI 기반 프로그램 코드
+ - 왼쪽 마우스 : 클릭한 좌표 중심으로 Control Image 생성
+ - 키보드 'r'  : 선택된 이미지 차례로 삭제
+ - 키보드 's'  : 선택된 이미지 저장
+ - 키보드 'q'  : 저장하지 않고 GUI 프로그램 종료
+'''
 def create_control_img(img_path):
 
     print()
     print('The function creating control image ')
     print('- left mouse button : Create control image')
     print('- keyboard "r" : remove selected image ')
-    print('- keyboard "s" : save selectde image ')
+    print('- keyboard "s" : save selected image ')
     print('- keyboard "q" : exit without saving the selectde image ')
     print()
 
@@ -59,3 +64,28 @@ def create_control_img(img_path):
         elif key == ord('q'):
             break
     cv2.destroyAllWindows()
+
+# Control Image 존재여부 확인 및 생성코드
+# - 존재하더라도 'yes' 입력 시 새로 생성가능
+def get_control_img(test_Video):
+    test_Video_folder = 'image_registration/control_img/' + test_Video
+    test_Video_path = 'input_video/' + test_Video + '.MP4'
+    first_frm = test_Video_folder + '/{}.jpg'.format(test_Video)
+    if os.path.exists(test_Video_folder):
+        print()
+        create_new_ctlimg = input('If you wanna create new control image, Write yes : ')
+        if create_new_ctlimg =='yes':
+            create_control_img(first_frm)
+        else:
+            pass
+    else:
+        os.mkdir(test_Video_folder)
+        vidcap = cv2.VideoCapture(test_Video_path)
+        while(vidcap.isOpened()):
+            ret, image = vidcap.read()
+            cv2.imwrite(first_frm, image)
+            break
+        print(first_frm)
+        create_control_img(first_frm)
+    controlImg_path = [test_Video_folder + '/' + ctlImg for ctlImg in os.listdir(test_Video_folder) if 'ctl' in ctlImg]
+    return controlImg_path
