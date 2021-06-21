@@ -9,50 +9,24 @@ from yolov5.utils.torch_utils import select_device, time_synchronized
 from deep_sort_pytorch.utils.parser import get_config
 from deep_sort_pytorch.deep_sort import DeepSort
 
-from img_matching.crop_img import create_control_img
+from image_registration.create_control_img import get_control_img
+from image_registration.feature_matching import run_image_registration
+from image_registration.update_control_Image import update_ctlImg
+
+from utilss import bbox_ccwh
+from utilss import bbox_ltrd
+from utilss import compute_color_for_labels
 
 import argparse
 import os
 import platform
 import shutil
 import time
+import yaml
 from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
-
-
-
-palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
-
-
-def bbox_ccwh(*xyxy):
-    """" Calculates the relative bounding box from absolute pixel values. """
-    bbox_left = min([xyxy[0].item(), xyxy[2].item()])
-    bbox_top = min([xyxy[1].item(), xyxy[3].item()])
-    bbox_w = abs(xyxy[0].item() - xyxy[2].item())
-    bbox_h = abs(xyxy[1].item() - xyxy[3].item())
-    x_c = (bbox_left + bbox_w / 2)
-    y_c = (bbox_top + bbox_h / 2)
-    w = bbox_w
-    h = bbox_h
-    return x_c, y_c, w, h
-
-def bbox_ltrd(*xyxy):
-    """" Calculates the relative bounding box from absolute pixel values. """
-    bbox_left = min([xyxy[0].item(), xyxy[2].item()])
-    bbox_top = min([xyxy[1].item(), xyxy[3].item()])
-    bbox_right = max([xyxy[0].item(), xyxy[2].item()])
-    bbox_down = max([xyxy[1].item(), xyxy[3].item()])
-    return bbox_left, bbox_top, bbox_right, bbox_down
-
-def compute_color_for_labels(label):
-    """
-    Simple function that adds fixed color depending on the class
-    """
-    label = (label + 1) * 2
-    color = [int((p * (label ** 2 - label + 1)) % 255) for p in palette]
-    return tuple(color)
 
 class Obj_info:
     def __init__(self, bbox, cls):
@@ -116,8 +90,8 @@ class Tracked_Obj(Obj_info):
         return img
 
 def detect(opt):
-    out, source, weights, view_vid, save_vid, save_txt, imgsz = \
-        opt.output, opt.source, opt.weights, opt.view_vid, opt.save_vid, opt.save_txt, opt.img_size
+    out, source, weights, view_vid, save_vid, save_txt, imgsz, ctl_img = \
+        opt.output, opt.source, opt.weights, opt.view_vid, opt.save_vid, opt.save_txt, opt.img_size, opt.ctl_img
     yolo_swch, deepsort_swch, vehtrk_swch, speed_swch, volume_swch, line_swch, density_swch, headway_swch = \
         opt.yolo_swch, opt.deepsort_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.line_swch, opt.density_swch, opt.headway_swch
     webcam = source == '0' or source.startswith(
@@ -174,6 +148,14 @@ def detect(opt):
     from _collections import deque
     pts = [deque(maxlen=100) for _ in range(10000)]
 
+    with open('get_traffic_parameter/point.yaml') as f:
+        data = yaml.load(f.read()) 
+    frm_point = data['frm_point']
+    geo_point = data['geo_point']
+    Counter_list = []
+    for i in range(len(data['counter'])):
+        Counter_list.append(data['counter'][i])
+
     for frame_idx, (path, img, im0s, vid_cap) in enumerate(dataset):
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -199,6 +181,19 @@ def detect(opt):
 
             s += '%gx%g ' % img.shape[2:]  # print string
             save_path = str(Path(out) / Path(p).name)
+
+            # Frame Points update using image registration
+            if speed_swch or volume_swch or line_swch:
+                # image registration
+                centerPoint = []
+                for ctl_img_path in ctl_img:
+                    centerPoint.append(run_image_registration(im0, ctl_img_path, 'brisk', 'bf', 'knnmatch'))
+                # Updating Frame Points
+                if frame_idx==0:
+                    ctlImg_centerPoint = update_ctlImg(frm_point, centerPoint)
+                    ctlImg_centerPoint.get_datum_distance()
+                frm_point = ctlImg_centerPoint.update_point(im0, frm_point, centerPoint)
+
 
             if det is not None and len(det):
                 # Rescale boxes from img_size to im0 size
@@ -316,7 +311,7 @@ if __name__ == '__main__':
     yolo_switch = False             # 차량 객체 검지 표출
     deepsort_switch = True          # 차량 객체 추적 표출
                                     # - yolo와 deepsort는 둘중 하나만 True 선택 (중복선택 시 중복된 결과물 표출)
-    VehTrack_switch = True          # 차량 주행궤적 추출
+    VehTrack_switch = False          # 차량 주행궤적 추출
     speed_switch = True            # 차량별 속도 추출
     volume_switch = False           # 교통량 추출
     line_switch = False             # 차선 추출
@@ -325,7 +320,7 @@ if __name__ == '__main__':
 
     # 트래킹 파라미터 설정
     test_Video = 'DJI_0167' # 테스트 영상 이름
-    exp_num = '20210608' # 실험 이름
+    exp_num = '20210622' # 실험 이름
 
     weights_path = 'yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
     test_Video_path = 'input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
@@ -335,6 +330,11 @@ if __name__ == '__main__':
     conf_thres = 0.4  # 신뢰도 문턱값(default : 0.4) : 해당 수치 중복도 이상은 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
     iou_thres = 0.5  # iou 문턱값(default : 0.5) : 검출 박스의 iou(교집합) 정도
     classes_type = [0, 1, 2] # 데이터셋 및 학습된 모델 클래스 종류
+
+    # Control Image 존재 여부 확인 후, 없으면 생성, 있으면 이미지 경로 도출
+    if speed_switch or volume_switch or line_switch:
+        Control_Img_path = get_control_img(test_Video)
+    else:Control_Img_path=[]
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str,
@@ -369,6 +369,8 @@ if __name__ == '__main__':
                         help='augmented inference')
     parser.add_argument("--config_deepsort", type=str,
                         default="deep_sort_pytorch/configs/deep_sort.yaml")
+    
+    parser.add_argument("--ctl_img", default=Control_Img_path, help='Control Images path')
     parser.add_argument("--yolo_swch", default=yolo_switch, help='Yolo on & off')
     parser.add_argument("--deepsort_swch", default=deepsort_switch, help='DeepSORT on & off')
     parser.add_argument("--vehtrk_swch", default=VehTrack_switch, help='Vehicle Track on & off')
@@ -381,28 +383,6 @@ if __name__ == '__main__':
     args.img_size = check_img_size(args.img_size)
     print(args)
 
-    if speed_switch or volume_switch or line_switch:
-        test_Video_folder = 'img_matching/control_img/' + test_Video
-        first_frm = test_Video_folder + '/{}.jpg'.format(test_Video)
-        if os.path.exists(test_Video_folder):
-            print()
-            create_new_ctlimg = input('If you wanna create new control image, Write yes : ')
-            if create_new_ctlimg =='yes':
-                create_control_img(first_frm)
-            else:
-                pass
-        else:
-            os.mkdir(test_Video_folder)
-            vidcap = cv2.VideoCapture(test_Video_path)
-            while(vidcap.isOpened()):
-                ret, image = vidcap.read()
-                cv2.imwrite(first_frm, image)
-                break
-            print(first_frm)
-            create_control_img(first_frm)
-
-
-
-
     with torch.no_grad():
         detect(args)
+
