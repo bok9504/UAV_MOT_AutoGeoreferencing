@@ -11,7 +11,7 @@ from deep_sort_pytorch.deep_sort import DeepSort
 
 from image_registration.create_control_img import get_control_img
 from image_registration.feature_matching import run_image_registration
-from image_registration.update_control_Image import update_ctlImg
+from image_registration.update_control_Image import update_ctlImg, point_dist
 
 from utilss import bbox_ccwh
 from utilss import bbox_ltrd
@@ -23,6 +23,8 @@ import platform
 import shutil
 import time
 import yaml
+import numpy as np
+from scipy import stats
 from pathlib import Path
 import cv2
 import torch
@@ -57,9 +59,16 @@ class Detected_Obj(Obj_info):
         return img
 
 class Tracked_Obj(Obj_info):
-    def __init__(self, bbox, cls, id):
+    def __init__(self, bbox, cls, id, pts):
         Obj_info.__init__(self, bbox, cls)
+        self.speed = []
         self.id = id
+        self.pts = pts
+        for i, box in enumerate(self.bbox):
+            center = (int(((box[0]) + (box[2]))/2), int(((box[1]) + (box[3]))/2))
+            self.pts[self.id[i]].append(center)
+        maxNum = max([len(pts[x]) for x in range(len(pts))])
+        [pts[y].append(None) for y in range(len(pts)) if len(pts[y]) != maxNum]
 
     def draw_box(self, img, offset=(0,0)):
         for i, box in enumerate(self.bbox):
@@ -79,15 +88,23 @@ class Tracked_Obj(Obj_info):
             cv2.putText(img, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [255,255,255], 2)
         return img
 
-    def Visualize_Track(self, img, pts):
-        for i, box in enumerate(self.bbox):
-            center = (int(((box[0]) + (box[2]))/2), int(((box[1]) + (box[3]))/2))
-            pts[self.id[i]].append(center)
-            for j in range(1, len(pts[self.id[i]])):
-                if pts[self.id[i]][j-1] is None or pts[self.id[i]][j] is None:
+    def Visualize_Track(self, img):
+        for i in range(len(self.id)):
+            for j in range(1, len(self.pts[self.id[i]])):
+                if self.pts[self.id[i]][j-1] is None or self.pts[self.id[i]][j] is None:
                     continue
-                cv2.line(img, (pts[self.id[i]][j-1]), (pts[self.id[i]][j]), (0,255,255), 5)
+                cv2.line(img, (self.pts[self.id[i]][j-1]), (self.pts[self.id[i]][j]), (0,255,255), 5)
         return img
+
+    def calc_Vehicle_Speed(self, dist_ratio, spd_unit):
+        for i in range(len(self.id)):
+            if self.pts[self.id[i]][-1] is None or self.pts[self.id[i]][-(1+spd_unit)] is None:
+                continue
+            frmMove_len = np.sqrt( pow(self.pts[self.id[i]][-(1+spd_unit)][0] - self.pts[self.id[i]][-1][0], 2)\
+                    + pow(self.pts[self.id[i]][-(1+spd_unit)][1] - self.pts[self.id[i]][-1][1], 2) )
+            geoMove_len = frmMove_len * dist_ratio
+            self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / spd_unit)
+        return self.speed
 
 def detect(opt):
     out, source, weights, view_vid, save_vid, save_txt, imgsz, ctl_img = \
@@ -142,16 +159,27 @@ def detect(opt):
         model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
     t0 = time.time()
 
+    # txt file path
     save_path = str(Path(out))
     txt_path = str(Path(out)) + '/results.txt'
 
+    global vid_cap
+
     from _collections import deque
     pts = [deque(maxlen=100) for _ in range(10000)]
+    spd_unit = 4
 
     with open('get_traffic_parameter/point.yaml') as f:
         data = yaml.load(f.read()) 
     frm_point = data['frm_point']
     geo_point = data['geo_point']
+
+    dist_ratio_list = []
+    for i in range(len(frm_point)):
+        for j in range(i+1, len(geo_point)):
+            dist_ratio_list.append(point_dist(geo_point[i],geo_point[j])/point_dist(frm_point[i],frm_point[j]))
+    dist_ratio = stats.trim_mean(dist_ratio_list, 0.5)
+
     Counter_list = []
     for i in range(len(data['counter'])):
         Counter_list.append(data['counter'][i])
@@ -247,12 +275,17 @@ def detect(opt):
                     bbox_xyxy = outputs[:, :4]
                     cls_id = outputs[:,4:5]
                     identities = outputs[:, -1]
-                    track_result = Tracked_Obj(bbox_xyxy, cls_id, identities)
+                    track_result = Tracked_Obj(bbox_xyxy, cls_id, identities, pts)
                     track_result.draw_box(im0)
 
                     # draw vehicle trajectory for visualization
                     if vehtrk_swch:
-                        track_result.Visualize_Track(im0, pts)
+                        # track_result.get_deque()
+                        track_result.Visualize_Track(im0)
+
+                    if speed_swch:
+                        speed = track_result.calc_Vehicle_Speed(dist_ratio, spd_unit)
+                        print(speed)
 
                 # Write MOT compliant results to file
                 if save_txt and len(outputs) != 0:
@@ -311,7 +344,7 @@ if __name__ == '__main__':
     yolo_switch = False             # 차량 객체 검지 표출
     deepsort_switch = True          # 차량 객체 추적 표출
                                     # - yolo와 deepsort는 둘중 하나만 True 선택 (중복선택 시 중복된 결과물 표출)
-    VehTrack_switch = False          # 차량 주행궤적 추출
+    VehTrack_switch = True          # 차량 주행궤적 추출
     speed_switch = True            # 차량별 속도 추출
     volume_switch = False           # 교통량 추출
     line_switch = False             # 차선 추출
@@ -320,7 +353,7 @@ if __name__ == '__main__':
 
     # 트래킹 파라미터 설정
     test_Video = 'DJI_0167' # 테스트 영상 이름
-    exp_num = '20210622' # 실험 이름
+    exp_num = '20210629' # 실험 이름
 
     weights_path = 'yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
     test_Video_path = 'input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
