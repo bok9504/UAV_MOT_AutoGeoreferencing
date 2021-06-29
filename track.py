@@ -69,6 +69,17 @@ class Tracked_Obj(Obj_info):
             self.pts[self.id[i]].append(center)
         maxNum = max([len(pts[x]) for x in range(len(pts))])
         [pts[y].append(None) for y in range(len(pts)) if len(pts[y]) != maxNum]
+        """
+        pts 생성 방식 변경에 따른 추가 작업 필요
+        1. Visualize_Track 코드 수정
+        2. calc_Vehicle_Speed 코드 수정
+
+        draw_box 형식 변경
+        1. draw_box를 Obj_info 클래스로 올리는 방법 고민
+        2. 스위치에 따른 draw_box label 변경
+
+        이중 for 문 list comprehension으로 변경
+        """
 
     def draw_box(self, img, offset=(0,0)):
         for i, box in enumerate(self.bbox):
