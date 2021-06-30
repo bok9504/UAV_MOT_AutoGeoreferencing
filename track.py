@@ -24,6 +24,7 @@ import shutil
 import time
 import yaml
 import numpy as np
+import copy
 from scipy import stats
 from pathlib import Path
 import cv2
@@ -67,8 +68,8 @@ class Tracked_Obj(Obj_info):
         for i, box in enumerate(self.bbox):
             center = (int(((box[0]) + (box[2]))/2), int(((box[1]) + (box[3]))/2))
             self.pts[self.id[i]].append(center)
-        maxNum = max([len(pts[x]) for x in range(len(pts))])
-        [pts[y].append(None) for y in range(len(pts)) if len(pts[y]) != maxNum]
+        maxNum = max([len(self.pts[x]) for x in range(len(self.pts))])
+        [self.pts[y].append(None) for y in range(len(self.pts)) if len(self.pts[y]) != maxNum]
         """
         pts 생성 방식 변경에 따른 추가 작업 필요
         1. Visualize_Track 코드 수정
@@ -101,21 +102,24 @@ class Tracked_Obj(Obj_info):
 
     def Visualize_Track(self, img):
         for i in range(len(self.id)):
-            for j in range(1, len(self.pts[self.id[i]])):
-                if self.pts[self.id[i]][j-1] is None or self.pts[self.id[i]][j] is None:
-                    continue
-                cv2.line(img, (self.pts[self.id[i]][j-1]), (self.pts[self.id[i]][j]), (0,255,255), 5)
+            ptsTrk = self.pts[self.id[i]].copy()
+            while None in ptsTrk:
+                ptsTrk.remove(None)
+            for j in range(1, len(ptsTrk)):
+                cv2.line(img, (ptsTrk[j-1]), (ptsTrk[j]), (0,255,255), 5)
         return img
 
-    def calc_Vehicle_Speed(self, dist_ratio, spd_unit):
+    def calc_Vehicle_Speed(self, dist_ratio):
         for i in range(len(self.id)):
-            if self.pts[self.id[i]][-1] is None or self.pts[self.id[i]][-(1+spd_unit)] is None:
-                continue
-            frmMove_len = np.sqrt( pow(self.pts[self.id[i]][-(1+spd_unit)][0] - self.pts[self.id[i]][-1][0], 2)\
-                    + pow(self.pts[self.id[i]][-(1+spd_unit)][1] - self.pts[self.id[i]][-1][1], 2) )
-            geoMove_len = frmMove_len * dist_ratio
-            self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / spd_unit)
-        return self.speed
+            ptsSpd = self.pts[self.id[i]].copy()
+            curLoc = ptsSpd.pop()
+            ptsSpd.reverse()
+            if len(ptsSpd) != 0:
+                for frmIdx, prevLoc in enumerate(ptsSpd):
+                    if prevLoc != None:break
+                frmMove_len = np.sqrt( pow(prevLoc[0] - curLoc[0], 2) + pow(prevLoc[1] - curLoc[1], 2) )
+                geoMove_len = frmMove_len * dist_ratio
+                self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / (frmIdx+1))
 
 def detect(opt):
     out, source, weights, view_vid, save_vid, save_txt, imgsz, ctl_img = \
@@ -177,8 +181,7 @@ def detect(opt):
     global vid_cap
 
     from _collections import deque
-    pts = [deque(maxlen=100) for _ in range(10000)]
-    spd_unit = 4
+    pts = [deque(maxlen=100) for _ in range(100)]
 
     with open('get_traffic_parameter/point.yaml') as f:
         data = yaml.load(f.read()) 
@@ -295,8 +298,7 @@ def detect(opt):
                         track_result.Visualize_Track(im0)
 
                     if speed_swch:
-                        speed = track_result.calc_Vehicle_Speed(dist_ratio, spd_unit)
-                        print(speed)
+                        track_result.calc_Vehicle_Speed(dist_ratio)
 
                 # Write MOT compliant results to file
                 if save_txt and len(outputs) != 0:
@@ -355,7 +357,7 @@ if __name__ == '__main__':
     yolo_switch = False             # 차량 객체 검지 표출
     deepsort_switch = True          # 차량 객체 추적 표출
                                     # - yolo와 deepsort는 둘중 하나만 True 선택 (중복선택 시 중복된 결과물 표출)
-    VehTrack_switch = True          # 차량 주행궤적 추출
+    VehTrack_switch = False          # 차량 주행궤적 추출
     speed_switch = True            # 차량별 속도 추출
     volume_switch = False           # 교통량 추출
     line_switch = False             # 차선 추출
