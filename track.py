@@ -10,7 +10,7 @@ from deep_sort_pytorch.utils.parser import get_config
 from deep_sort_pytorch.deep_sort import DeepSort
 
 from image_registration.create_control_img import get_control_img
-from image_registration.feature_matching import run_image_registration
+from image_registration.feature_matching import image_registration, run_image_registration
 from image_registration.update_control_Image import update_ctlImg, point_dist
 
 from utilss import bbox_ccwh
@@ -24,7 +24,6 @@ import shutil
 import time
 import yaml
 import numpy as np
-import copy
 from scipy import stats
 from pathlib import Path
 import cv2
@@ -35,71 +34,62 @@ class Obj_info:
     def __init__(self, bbox, cls):
         self.bbox = bbox
         self.cls = cls
+        self.label = []
+
+    # Draw Vehicle bounding boxes
+    def draw_box(self, img, offset=(0,0)):
+        for i, box in enumerate(self.bbox):
+            x1, y1, x2, y2 = [int(i) for i in box]
+            x1 += offset[0]
+            x2 += offset[0]
+            y1 += offset[1]
+            y2 += offset[1]
+            clsss = int(self.cls[i][0])
+            color = compute_color_for_labels(clsss)
+            t_size = cv2.getTextSize(self.label[i], cv2.FONT_HERSHEY_PLAIN, 1, 1)[0]
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
+            cv2.rectangle(
+                img, (x1 + t_size[0] + 3, y1 - (t_size[1] + 4)), (x1, y1), color, -1)
+            cv2.putText(img, self.label[i], (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [255,255,255], 2)
+        return img
 
 class Detected_Obj(Obj_info):
     def __init__(self, bbox, cls, confs):
         Obj_info.__init__(self, bbox, cls)
         self.confs = confs
 
-    def draw_box(self, img, offset=(0,0)):
-        for i, box in enumerate(self.bbox):
-            x1, y1, x2, y2 = [int(i) for i in box]
-            x1 += offset[0]
-            x2 += offset[0]
-            y1 += offset[1]
-            y2 += offset[1]
+    # Setting bounding boxes label for each vehicle
+    def set_label(self):
+        for i in range(len(self.bbox)):
             clsss = int(self.cls[i][0])
             confss = float(self.confs[i][0])*100
-            color = compute_color_for_labels(clsss)
-            label = '{} {:.2f}%'.format(namess[clsss], confss)
-            t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 1, 1)[0]
-            cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
-            cv2.rectangle(
-                img, (x1 + t_size[0] + 3, y1 - (t_size[1] + 4)), (x1, y1), color, -1)
-            cv2.putText(img, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [255,255,255], 2)
-        return img
+            self.label.append('{} {:.2f}%'.format(namess[clsss], confss))
 
 class Tracked_Obj(Obj_info):
     def __init__(self, bbox, cls, id, pts):
         Obj_info.__init__(self, bbox, cls)
         self.speed = []
         self.id = id
+        # Create the list of center points
         self.pts = pts
         for i, box in enumerate(self.bbox):
             center = (int(((box[0]) + (box[2]))/2), int(((box[1]) + (box[3]))/2))
             self.pts[self.id[i]].append(center)
         maxNum = max([len(self.pts[x]) for x in range(len(self.pts))])
         [self.pts[y].append(None) for y in range(len(self.pts)) if len(self.pts[y]) != maxNum]
-        """
-        pts 생성 방식 변경에 따른 추가 작업 필요
-        1. Visualize_Track 코드 수정
-        2. calc_Vehicle_Speed 코드 수정
 
-        draw_box 형식 변경
-        1. draw_box를 Obj_info 클래스로 올리는 방법 고민
-        2. 스위치에 따른 draw_box label 변경
-
-        이중 for 문 list comprehension으로 변경
-        """
-
-    def draw_box(self, img, offset=(0,0)):
-        for i, box in enumerate(self.bbox):
-            x1, y1, x2, y2 = [int(i) for i in box]
-            x1 += offset[0]
-            x2 += offset[0]
-            y1 += offset[1]
-            y2 += offset[1]
+    # Setting bounding boxes label for each vehicle
+    def set_label(self):
+        for i in range(len(self.bbox)):
             clsss = int(self.cls[i][0])
-            ids = int(self.id[i])
-            color = compute_color_for_labels(clsss)
-            label = '{}-{}'.format(namess[clsss], ids)
-            t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 1, 1)[0]
-            cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
-            cv2.rectangle(
-                img, (x1 + t_size[0] + 3, y1 - (t_size[1] + 4)), (x1, y1), color, -1)
-            cv2.putText(img, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [255,255,255], 2)
-        return img
+            ids = int(self.id[i])       
+            if len(self.speed)==0 or self.speed[i] is None: # None speed information (just tracked)
+                self.label.append('{}-{}'.format(namess[clsss], ids))
+            else:   # speed information exists
+                vehSpd = int(abs(self.speed[i]))
+                self.label.append("{}-{} Speed:{}km/h".format(namess[clsss], ids, vehSpd))
 
+    # Tracking path visualization
     def Visualize_Track(self, img):
         for i in range(len(self.id)):
             ptsTrk = self.pts[self.id[i]].copy()
@@ -109,6 +99,7 @@ class Tracked_Obj(Obj_info):
                 cv2.line(img, (ptsTrk[j-1]), (ptsTrk[j]), (0,255,255), 5)
         return img
 
+    # vehicle speed calculation
     def calc_Vehicle_Speed(self, dist_ratio):
         for i in range(len(self.id)):
             ptsSpd = self.pts[self.id[i]].copy()
@@ -116,16 +107,20 @@ class Tracked_Obj(Obj_info):
             ptsSpd.reverse()
             if len(ptsSpd) != 0:
                 for frmIdx, prevLoc in enumerate(ptsSpd):
-                    if prevLoc != None:break
-                frmMove_len = np.sqrt( pow(prevLoc[0] - curLoc[0], 2) + pow(prevLoc[1] - curLoc[1], 2) )
-                geoMove_len = frmMove_len * dist_ratio
+                    if prevLoc != None:break    # Get previous vehicle location and frame index
+                if frmIdx + 1 == len(ptsSpd):   # Case of None previous vehicle location
+                    self.speed.append(None)
+                    continue
+                frmMove_len = np.sqrt( pow(prevLoc[0] - curLoc[0], 2) + pow(prevLoc[1] - curLoc[1], 2) )    # Moving length in video frame
+                geoMove_len = frmMove_len * dist_ratio      # Moving length in geo
                 self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / (frmIdx+1))
+        return self.speed
 
 def detect(opt):
     out, source, weights, view_vid, save_vid, save_txt, imgsz, ctl_img = \
         opt.output, opt.source, opt.weights, opt.view_vid, opt.save_vid, opt.save_txt, opt.img_size, opt.ctl_img
-    yolo_swch, deepsort_swch, vehtrk_swch, speed_swch, volume_swch, line_swch, density_swch, headway_swch = \
-        opt.yolo_swch, opt.deepsort_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.line_swch, opt.density_swch, opt.headway_swch
+    yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch, line_swch, density_swch, headway_swch = \
+        opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.line_swch, opt.density_swch, opt.headway_swch
     webcam = source == '0' or source.startswith(
         'rtsp') or source.startswith('http') or source.endswith('.txt')
 
@@ -180,19 +175,22 @@ def detect(opt):
 
     global vid_cap
 
+    # Create the list of center points using deque
     from _collections import deque
-    pts = [deque(maxlen=100) for _ in range(100)]
+    pts = [deque(maxlen=100) for _ in range(1000)]
 
+    # Get control point
     with open('get_traffic_parameter/point.yaml') as f:
         data = yaml.load(f.read()) 
     frm_point = data['frm_point']
     geo_point = data['geo_point']
 
-    dist_ratio_list = []
-    for i in range(len(frm_point)):
-        for j in range(i+1, len(geo_point)):
-            dist_ratio_list.append(point_dist(geo_point[i],geo_point[j])/point_dist(frm_point[i],frm_point[j]))
-    dist_ratio = stats.trim_mean(dist_ratio_list, 0.5)
+    if speed_swch:
+        dist_ratio_list = []
+        for i in range(len(frm_point)):
+            for j in range(i+1, len(geo_point)):
+                dist_ratio_list.append(point_dist(geo_point[i],geo_point[j])/point_dist(frm_point[i],frm_point[j]))
+        dist_ratio = stats.trim_mean(dist_ratio_list, 0.5)
 
     Counter_list = []
     for i in range(len(data['counter'])):
@@ -225,7 +223,7 @@ def detect(opt):
             save_path = str(Path(out) / Path(p).name)
 
             # Frame Points update using image registration
-            if speed_swch or volume_swch or line_swch:
+            if img_registration_swch:
                 # image registration
                 centerPoint = []
                 for ctl_img_path in ctl_img:
@@ -266,6 +264,7 @@ def detect(opt):
                 # draw detected boxes for visualization
                 if yolo_swch:
                     detect_result = Detected_Obj(bbox_xyxy, clss, confs)
+                    detect_result.set_label()
                     detect_result.draw_box(im0)
 
                 xywhs = torch.Tensor(bbox_xywh)
@@ -290,15 +289,14 @@ def detect(opt):
                     cls_id = outputs[:,4:5]
                     identities = outputs[:, -1]
                     track_result = Tracked_Obj(bbox_xyxy, cls_id, identities, pts)
-                    track_result.draw_box(im0)
-
                     # draw vehicle trajectory for visualization
                     if vehtrk_swch:
-                        # track_result.get_deque()
                         track_result.Visualize_Track(im0)
-
-                    if speed_swch:
-                        track_result.calc_Vehicle_Speed(dist_ratio)
+                    # calculate vehicle speed
+                    if speed_swch and img_registration_swch:
+                        veh_speed = track_result.calc_Vehicle_Speed(dist_ratio)
+                    track_result.set_label()
+                    track_result.draw_box(im0)
 
                 # Write MOT compliant results to file
                 if save_txt and len(outputs) != 0:
@@ -354,19 +352,19 @@ if __name__ == '__main__':
     # YoloV5 + DeepSORT 트래킹 수행
 
     # 표출 기능 선택
-    yolo_switch = False             # 차량 객체 검지 표출
-    deepsort_switch = True          # 차량 객체 추적 표출
-                                    # - yolo와 deepsort는 둘중 하나만 True 선택 (중복선택 시 중복된 결과물 표출)
-    VehTrack_switch = False          # 차량 주행궤적 추출
-    speed_switch = True            # 차량별 속도 추출
-    volume_switch = False           # 교통량 추출
-    line_switch = False             # 차선 추출
+    yolo_switch = True              # 차량 객체 검지 표출
+    deepsort_switch = False         # 차량 객체 추적 표출
+    img_registration_switch = False # 영상 정합 수행
+    VehTrack_switch = False         # 차량 주행궤적 추출
+    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
+    volume_switch = False           # 교통량 추출      (영상정합 필요)
+    line_switch = False             # 차선 추출        (영상정합 필요)
     density_switch = False          # 밀도 추출
     headway_switch = False          # 차두간격 추출
 
     # 트래킹 파라미터 설정
     test_Video = 'DJI_0167' # 테스트 영상 이름
-    exp_num = '20210629' # 실험 이름
+    exp_num = '20210630' # 실험 이름
 
     weights_path = 'yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
     test_Video_path = 'input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
@@ -378,7 +376,7 @@ if __name__ == '__main__':
     classes_type = [0, 1, 2] # 데이터셋 및 학습된 모델 클래스 종류
 
     # Control Image 존재 여부 확인 후, 없으면 생성, 있으면 이미지 경로 도출
-    if speed_switch or volume_switch or line_switch:
+    if img_registration_switch:
         Control_Img_path = get_control_img(test_Video)
     else:Control_Img_path=[]
 
@@ -419,6 +417,7 @@ if __name__ == '__main__':
     parser.add_argument("--ctl_img", default=Control_Img_path, help='Control Images path')
     parser.add_argument("--yolo_swch", default=yolo_switch, help='Yolo on & off')
     parser.add_argument("--deepsort_swch", default=deepsort_switch, help='DeepSORT on & off')
+    parser.add_argument("--img_registration_swch", default=img_registration_switch, help='Image Registration on & off')
     parser.add_argument("--vehtrk_swch", default=VehTrack_switch, help='Vehicle Track on & off')
     parser.add_argument("--speed_swch", default=speed_switch, help='Speed on & off')
     parser.add_argument("--volume_swch", default=volume_switch, help='Volume on & off')
