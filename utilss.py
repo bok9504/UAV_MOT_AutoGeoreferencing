@@ -1,3 +1,5 @@
+import time
+
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
 
 def compute_color_for_labels(label):
@@ -28,3 +30,15 @@ def bbox_ltrd(*xyxy):
     bbox_down = max([xyxy[1].item(), xyxy[3].item()])
     return bbox_left, bbox_top, bbox_right, bbox_down
 
+def track_time(func):
+    def new_func(*args, **kwargs):
+        start_time = time.time()
+        func(*args, **kwargs)
+        end_time = time.time()
+        exec_time = end_time - start_time
+        print('"{}" function : {:.4f} sec'.format(func.__name__, exec_time))
+    return new_func
+
+# import sys
+# sys.path.append("..")
+# from utilss import track_time

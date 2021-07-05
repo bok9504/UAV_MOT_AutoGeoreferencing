@@ -230,6 +230,9 @@ def detect(opt):
                     centerPoint.append(run_image_registration(im0, ctl_img_path, 'brisk', 'bf', 'knnmatch'))
                 # Updating Frame Points
                 if frame_idx==0:
+                    print()
+                    print(frm_point)
+                    print(centerPoint)
                     ctlImg_centerPoint = update_ctlImg(frm_point, centerPoint)
                     ctlImg_centerPoint.get_datum_distance()
                 frm_point = ctlImg_centerPoint.update_point(im0, frm_point, centerPoint)
@@ -352,19 +355,19 @@ if __name__ == '__main__':
     # YoloV5 + DeepSORT 트래킹 수행
 
     # 표출 기능 선택
-    yolo_switch = True              # 차량 객체 검지 표출
-    deepsort_switch = False         # 차량 객체 추적 표출
-    img_registration_switch = False # 영상 정합 수행
-    VehTrack_switch = False         # 차량 주행궤적 추출
-    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
-    volume_switch = False           # 교통량 추출      (영상정합 필요)
-    line_switch = False             # 차선 추출        (영상정합 필요)
-    density_switch = False          # 밀도 추출
-    headway_switch = False          # 차두간격 추출
+    yolo_switch = False                  # 차량 객체 검지 표출
+    deepsort_switch = True             # 차량 객체 추적 표출
+    img_registration_switch = True     # 영상 정합 수행
+    VehTrack_switch = False             # 차량 주행궤적 추출
+    speed_switch = True                 # 차량별 속도 추출 (영상정합 필요)
+    volume_switch = False               # 교통량 추출      (영상정합 필요)
+    line_switch = False                 # 차선 추출        (영상정합 필요)
+    density_switch = False              # 밀도 추출
+    headway_switch = False              # 차두간격 추출
 
     # 트래킹 파라미터 설정
     test_Video = 'DJI_0167' # 테스트 영상 이름
-    exp_num = '20210630' # 실험 이름
+    exp_num = '20210705' # 실험 이름
 
     weights_path = 'yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
     test_Video_path = 'input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
