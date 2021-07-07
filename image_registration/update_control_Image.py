@@ -1,4 +1,5 @@
 from scipy.optimize import least_squares
+from functools import reduce
 import numpy as np
 import math
 import cv2
@@ -40,23 +41,30 @@ def point_dist(R1,R2):
 
 # Control Image Updating class
 class update_ctlImg:
-    def __init__(self, frm_point, center_point):
-        self.frm_point = frm_point
+    def __init__(self, center_point):
         self.center_point = center_point
 
-        self.datum_dist = []
-
-    # frm_point와 Control Image의 center point 간의 거리 저장 (첫 프레임 기준)
-    def get_datum_distance(self):
-        for pointNum in range(len(self.frm_point)):
+    # Target point와 Control Image의 center point 간의 거리 저장 (첫 프레임 기준)
+    def get_datum_distance(self, trg_point):
+        _trg_point = [val for val in trg_point.values()]
+        tmpshp = np.array(_trg_point).shape
+        trg_list = np.array(_trg_point).flatten().tolist()
+        datum_dist = []
+        for pointNum in range(0, len(trg_list), 2):
+            _trg_point_ = trg_list[pointNum:pointNum+2]
             for CPnum in range(len(self.center_point)):
-                self.datum_dist.append(point_dist(self.center_point[CPnum], self.frm_point[pointNum]))
-        self.datum_dist = np.reshape(self.datum_dist,(len(self.frm_point),len(self.center_point)))
+                datum_dist.append(point_dist(self.center_point[CPnum], _trg_point_))
+        datum_dist = np.reshape(datum_dist, (reduce(lambda x, y: x * y, tmpshp[:-1]), len(self.center_point)))
+        return datum_dist
 
-    # 삼변측량을 활용한 frm_point 위치 갱신 (매 프레임 수행)
-    def update_point(self, img, frm_point, centerPoint):
-        for pointNum in range(len(frm_point)):
-            img = cv2.circle(img, frm_point[pointNum], 10, (0,0,0),-1)
-            newPoint = intersectionPoint(centerPoint, self.datum_dist[pointNum])
-            self.frm_point[pointNum] = newPoint
-        return self.frm_point
+    # 삼변측량을 활용한 prev_point 위치 갱신 (매 프레임 수행)
+    def update_point(self, trg_point, datum_dist):
+        new_point = []
+        _trg_point = [val for val in trg_point.values()]
+        tmpshp = np.array(_trg_point).shape
+        for pointNum in range(reduce(lambda x, y: x * y, tmpshp[:-1])):
+            newPoint = intersectionPoint(self.center_point, datum_dist[pointNum])
+            new_point.append(newPoint)
+        new_point = np.reshape(new_point, tmpshp)
+        new_point = dict(enumerate([tuple(x) for x in new_point]))
+        return new_point

@@ -30,6 +30,21 @@ import cv2
 import torch
 import torch.backends.cudnn as cudnn
 
+def is_divide_pt(x11,y11, x12,y12, x21,y21, x22,y22):
+    f1= (x12-x11)*(y21-y11) - (y12-y11)*(x21-x11)
+    f2= (x12-x11)*(y22-y11) - (y12-y11)*(x22-x11)
+    if np.sign(f1)*np.sign(f2) < 0 :
+        return True
+    else:
+        return False
+def is_cross_pt(x11,y11, x12,y12, x21,y21, x22,y22):
+    b1 = is_divide_pt(x11,y11, x12,y12, x21,y21, x22,y22)
+    b2 = is_divide_pt(x21,y21, x22,y22, x11,y11, x12,y12)
+    if b1 and b2:
+        return True
+    else:
+        return False
+
 class Obj_info:
     def __init__(self, bbox, cls):
         self.bbox = bbox
@@ -68,8 +83,8 @@ class Detected_Obj(Obj_info):
 class Tracked_Obj(Obj_info):
     def __init__(self, bbox, cls, id, pts):
         Obj_info.__init__(self, bbox, cls)
-        self.speed = []
         self.id = id
+        self.speed = []
         # Create the list of center points
         self.pts = pts
         for i, box in enumerate(self.bbox):
@@ -102,19 +117,45 @@ class Tracked_Obj(Obj_info):
     # vehicle speed calculation
     def calc_Vehicle_Speed(self, dist_ratio):
         for i in range(len(self.id)):
-            ptsSpd = self.pts[self.id[i]].copy()
-            curLoc = ptsSpd.pop()
-            ptsSpd.reverse()
-            if len(ptsSpd) != 0:
-                for frmIdx, prevLoc in enumerate(ptsSpd):
+            ptss = self.pts[self.id[i]].copy()
+            curLoc = ptss.pop()
+            ptss.reverse()
+            if len(ptss) != 0:
+                for frmIdx, prevLoc in enumerate(ptss):
                     if prevLoc != None:break    # Get previous vehicle location and frame index
-                if frmIdx + 1 == len(ptsSpd):   # Case of None previous vehicle location
+                if frmIdx + 1 == len(ptss):   # Case of None previous vehicle location
                     self.speed.append(None)
                     continue
                 frmMove_len = np.sqrt( pow(prevLoc[0] - curLoc[0], 2) + pow(prevLoc[1] - curLoc[1], 2) )    # Moving length in video frame
                 geoMove_len = frmMove_len * dist_ratio      # Moving length in geo
                 self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / (frmIdx+1))
         return self.speed
+
+    # traffic volume calculation
+    def calc_Volume(self, Counter_list, volume):
+        for i in range(len(self.id)):
+            ptss = self.pts[self.id[i]].copy()
+            curLoc = ptss.pop()
+            ptss.reverse()
+            if len(ptss) != 0:
+                for frmIdx, prevLoc in enumerate(ptss):
+                    if (prevLoc != None) and (frmIdx%2==1):break
+                if frmIdx + 1 == len(ptss): continue  # Case of None previous vehicle location
+                for cntIdx, Counter in Counter_list.items():
+                    if is_cross_pt(Counter[0][0], Counter[0][1], Counter[1][0], Counter[1][1], prevLoc[0], prevLoc[1], curLoc[0], curLoc[1]):
+                        volume[cntIdx][self.cls[0]] += 1
+                        volume[cntIdx][-1] += 1
+        return volume
+    
+    def draw_Volume(self, img, Counter_list, volume):
+        for counter in Counter_list.values():
+            img = cv2.line(img, tuple(counter[0]), tuple(counter[1]), (0,0,0), 5,-1)
+        for cntIdx in range(len(Counter_list)):
+            cv2.putText(img, 'count_{}_total : {}'.format(cntIdx+1, volume[cntIdx][-1]), (100+400*cntIdx, 110), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 0, 0), 2) # 카운팅 되는거 보이게
+            cv2.putText(img, 'count_{}_{} : {}'.format(cntIdx+1, namess[0], volume[cntIdx][0]), (100+400*cntIdx, 140), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
+            cv2.putText(img, 'count_{}_{} : {}'.format(cntIdx+1, namess[1], volume[cntIdx][1]), (100+400*cntIdx, 170), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
+            cv2.putText(img, 'count_{}_{} : {}'.format(cntIdx+1, namess[2], volume[cntIdx][2]), (100+400*cntIdx, 200), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
+
 
 def detect(opt):
     out, source, weights, view_vid, save_vid, save_txt, imgsz, ctl_img = \
@@ -175,15 +216,12 @@ def detect(opt):
 
     global vid_cap
 
-    # Create the list of center points using deque
-    from _collections import deque
-    pts = [deque(maxlen=100) for _ in range(1000)]
-
-    # Get control point
+    # Get control point & counter point
     with open('get_traffic_parameter/point.yaml') as f:
         data = yaml.load(f.read()) 
     frm_point = data['frm_point']
-    geo_point = data['geo_point']
+    geo_point = data['geo_point']  
+    Counter_list = data['counter']
 
     if speed_swch:
         dist_ratio_list = []
@@ -192,9 +230,10 @@ def detect(opt):
                 dist_ratio_list.append(point_dist(geo_point[i],geo_point[j])/point_dist(frm_point[i],frm_point[j]))
         dist_ratio = stats.trim_mean(dist_ratio_list, 0.5)
 
-    Counter_list = []
-    for i in range(len(data['counter'])):
-        Counter_list.append(data['counter'][i])
+    # Create the list of center points using deque
+    from _collections import deque
+    pts = [deque(maxlen=100) for _ in range(1000)]
+    volume = np.zeros((len(Counter_list),len(namess)+1))
 
     for frame_idx, (path, img, im0s, vid_cap) in enumerate(dataset):
         img = torch.from_numpy(img).to(device)
@@ -228,15 +267,18 @@ def detect(opt):
                 centerPoint = []
                 for ctl_img_path in ctl_img:
                     centerPoint.append(run_image_registration(im0, ctl_img_path, 'brisk', 'bf', 'knnmatch'))
+                ctlImg_centerPoint = update_ctlImg(centerPoint)
                 # Updating Frame Points
                 if frame_idx==0:
-                    print()
-                    print(frm_point)
-                    print(centerPoint)
-                    ctlImg_centerPoint = update_ctlImg(frm_point, centerPoint)
-                    ctlImg_centerPoint.get_datum_distance()
-                frm_point = ctlImg_centerPoint.update_point(im0, frm_point, centerPoint)
-
+                    datum_dist_frm = ctlImg_centerPoint.get_datum_distance(frm_point)
+                frm_point = ctlImg_centerPoint.update_point(frm_point, datum_dist_frm)
+                for pointNum in range(len(frm_point)):
+                    im0 = cv2.circle(im0, frm_point[pointNum], 10, (0,0,0),-1)
+                # Updating Counters
+                if volume_swch:
+                    if frame_idx==0:
+                        datum_dist_cnt = ctlImg_centerPoint.get_datum_distance(Counter_list)
+                    Counter_list = ctlImg_centerPoint.update_point(Counter_list, datum_dist_cnt)
 
             if det is not None and len(det):
                 # Rescale boxes from img_size to im0 size
@@ -298,6 +340,11 @@ def detect(opt):
                     # calculate vehicle speed
                     if speed_swch and img_registration_swch:
                         veh_speed = track_result.calc_Vehicle_Speed(dist_ratio)
+                    # calculate vehicle speed
+                    if volume_swch and img_registration_swch:
+                        if frame_idx % 2 == 0:
+                            volume = track_result.calc_Volume(Counter_list, volume)
+                        track_result.draw_Volume(im0, Counter_list, volume)
                     track_result.set_label()
                     track_result.draw_box(im0)
 
@@ -308,10 +355,13 @@ def detect(opt):
                         bbox_top = output[1]
                         bbox_w = output[2]
                         bbox_h = output[3]
+                        cls_id = output[4]
                         identity = output[-1]
+                        if speed_swch and len(veh_speed)!=0 and veh_speed[j]!=None: spd = veh_speed[j]
+                        else: spd = -1
                         with open(txt_path, 'a') as f:
                             f.write(('%g ' * 10 + '\n') % (frame_idx, identity, bbox_left,
-                                                           bbox_top, bbox_w, bbox_h, -1, -1, -1, -1))  # label format
+                                                           bbox_top, bbox_w, bbox_h, cls_id, spd, -1, -1))  # label format
 
             else:
                 deepsort.increment_ages()
@@ -355,19 +405,19 @@ if __name__ == '__main__':
     # YoloV5 + DeepSORT 트래킹 수행
 
     # 표출 기능 선택
-    yolo_switch = False                  # 차량 객체 검지 표출
-    deepsort_switch = True             # 차량 객체 추적 표출
-    img_registration_switch = True     # 영상 정합 수행
-    VehTrack_switch = False             # 차량 주행궤적 추출
-    speed_switch = True                 # 차량별 속도 추출 (영상정합 필요)
-    volume_switch = False               # 교통량 추출      (영상정합 필요)
-    line_switch = False                 # 차선 추출        (영상정합 필요)
-    density_switch = False              # 밀도 추출
-    headway_switch = False              # 차두간격 추출
+    yolo_switch = False              # 차량 객체 검지 표출
+    deepsort_switch = True         # 차량 객체 추적 표출
+    img_registration_switch = True # 영상 정합 수행
+    VehTrack_switch = False         # 차량 주행궤적 추출
+    speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
+    volume_switch = True           # 교통량 추출      (영상정합 필요)
+    line_switch = False             # 차선 추출        (영상정합 필요)
+    density_switch = False          # 밀도 추출
+    headway_switch = False          # 차두간격 추출
 
     # 트래킹 파라미터 설정
     test_Video = 'DJI_0167' # 테스트 영상 이름
-    exp_num = '20210705' # 실험 이름
+    exp_num = '20210707' # 실험 이름
 
     weights_path = 'yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
     test_Video_path = 'input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
@@ -405,7 +455,7 @@ if __name__ == '__main__':
                         help='display results')
     parser.add_argument('--save-vid', action='store_true', default=output_path,
                         help='display results')
-    parser.add_argument('--save-txt', action='store_true',
+    parser.add_argument('--save-txt', action='store_true', default=True,
                         help='save results to *.txt')
     # class 0 is person
     parser.add_argument('--classes', nargs='+', type=int,
