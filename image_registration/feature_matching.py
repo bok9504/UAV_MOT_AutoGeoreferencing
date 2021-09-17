@@ -101,7 +101,8 @@ class image_registration:
             dst = cv2.perspectiveTransform(pts,mtrx)  
             self.dst = dst
         else:
-            raise SystemExit("Not enough matches are found - {}/{}".format(len(good_matches), self.MIN_MATCH_COUNT))
+
+            raise SystemExit("Not enough matches are found - {}/{}\n{}".format(len(good_matches), self.MIN_MATCH_COUNT, self.query_path))
 
     def draw_Line_get_ConterPoint(self):
         dst = np.int32(self.dst)

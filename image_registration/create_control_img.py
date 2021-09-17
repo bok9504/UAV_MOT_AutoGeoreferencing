@@ -17,7 +17,7 @@ def create_control_img(img_path):
     print('- left mouse button : Create control image')
     print('- keyboard "r" : remove selected image ')
     print('- keyboard "s" : save selected image ')
-    print('- keyboard "q" : exit without saving the selectde image ')
+    print('- keyboard "q" : exit without saving the selected image ')
     print()
 
     def click_and_crop(event, x, y, flags, param):    
