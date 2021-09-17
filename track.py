@@ -24,6 +24,7 @@ import shutil
 import time
 import yaml
 import numpy as np
+from haversine import haversine
 from scipy import stats
 from pathlib import Path
 import cv2
@@ -115,14 +116,14 @@ class Tracked_Obj(Obj_info):
         return img
 
     # vehicle speed calculation
-    def calc_Vehicle_Speed(self, dist_ratio):
+    def calc_Vehicle_Speed(self, dist_ratio, spd_interval): # set fps using spd_interval
         for i in range(len(self.id)):
             ptss = self.pts[self.id[i]].copy()
             curLoc = ptss.pop()
             ptss.reverse()
             if len(ptss) != 0:
                 for frmIdx, prevLoc in enumerate(ptss):
-                    if prevLoc != None:break    # Get previous vehicle location and frame index
+                    if ((frmIdx+1)%(3*spd_interval)==0) & (prevLoc != None):break    # Get previous vehicle location and frame index
                 if frmIdx + 1 == len(ptss):   # Case of None previous vehicle location
                     self.speed.append(None)
                     continue
@@ -143,7 +144,7 @@ class Tracked_Obj(Obj_info):
                 if frmIdx + 1 == len(ptss): continue  # Case of None previous vehicle location
                 for cntIdx, Counter in Counter_list.items():
                     if is_cross_pt(Counter[0][0], Counter[0][1], Counter[1][0], Counter[1][1], prevLoc[0], prevLoc[1], curLoc[0], curLoc[1]):
-                        volume[cntIdx][self.cls[0]] += 1
+                        volume[cntIdx][self.cls[i]] += 1
                         volume[cntIdx][-1] += 1
         return volume
     
@@ -217,22 +218,15 @@ def detect(opt):
     global vid_cap
 
     # Get control point & counter point
-    with open('get_traffic_parameter/point.yaml') as f:
+    with open('get_traffic_parameter/'+test_Video+'_point.yaml') as f:
         data = yaml.load(f.read()) 
     frm_point = data['frm_point']
     geo_point = data['geo_point']  
     Counter_list = data['counter']
 
-    if speed_swch:
-        dist_ratio_list = []
-        for i in range(len(frm_point)):
-            for j in range(i+1, len(geo_point)):
-                dist_ratio_list.append(point_dist(geo_point[i],geo_point[j])/point_dist(frm_point[i],frm_point[j]))
-        dist_ratio = stats.trim_mean(dist_ratio_list, 0.5)
-
     # Create the list of center points using deque
     from _collections import deque
-    pts = [deque(maxlen=100) for _ in range(1000)]
+    pts = [deque(maxlen=200) for _ in range(10000)]
     volume = np.zeros((len(Counter_list),len(namess)+1))
 
     for frame_idx, (path, img, im0s, vid_cap) in enumerate(dataset):
@@ -260,6 +254,14 @@ def detect(opt):
 
             s += '%gx%g ' % img.shape[2:]  # print string
             save_path = str(Path(out) / Path(p).name)
+
+            if speed_swch:
+                print()
+                dist_ratio_list = []
+                for i in range(len(frm_point)):
+                    for j in range(i+1, len(geo_point)):
+                        dist_ratio_list.append(point_dist(geo_point[i],geo_point[j])/point_dist(frm_point[i],frm_point[j]))
+                dist_ratio = stats.trim_mean(dist_ratio_list, 0.5)
 
             # Frame Points update using image registration
             if img_registration_swch:
@@ -339,7 +341,7 @@ def detect(opt):
                         track_result.Visualize_Track(im0)
                     # calculate vehicle speed
                     if speed_swch and img_registration_swch:
-                        veh_speed = track_result.calc_Vehicle_Speed(dist_ratio)
+                        veh_speed = track_result.calc_Vehicle_Speed(dist_ratio, 1)
                     # calculate vehicle speed
                     if volume_swch and img_registration_swch:
                         if frame_idx % 2 == 0:
@@ -357,7 +359,7 @@ def detect(opt):
                         bbox_h = output[3]
                         cls_id = output[4]
                         identity = output[-1]
-                        if speed_swch and len(veh_speed)!=0 and veh_speed[j]!=None: spd = veh_speed[j]
+                        if speed_swch and len(veh_speed)!=0 and veh_speed[j]!=None: spd = veh_speed[j] and img_registration_swch
                         else: spd = -1
                         with open(txt_path, 'a') as f:
                             f.write(('%g ' * 10 + '\n') % (frame_idx, identity, bbox_left,
@@ -407,25 +409,25 @@ if __name__ == '__main__':
     # 표출 기능 선택
     yolo_switch = False              # 차량 객체 검지 표출
     deepsort_switch = True         # 차량 객체 추적 표출
-    img_registration_switch = True # 영상 정합 수행
+    img_registration_switch = False # 영상 정합 수행
     VehTrack_switch = False         # 차량 주행궤적 추출
-    speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
-    volume_switch = True           # 교통량 추출      (영상정합 필요)
+    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
+    volume_switch = False           # 교통량 추출      (영상정합 필요)
     line_switch = False             # 차선 추출        (영상정합 필요)
     density_switch = False          # 밀도 추출
     headway_switch = False          # 차두간격 추출
 
     # 트래킹 파라미터 설정
-    test_Video = 'DJI_0167' # 테스트 영상 이름
-    exp_num = '20210707' # 실험 이름
+    test_Video = 'DJI_0255_speed' # 테스트 영상 이름
+    exp_num = 'ubuntu_test' # 실험 이름
 
     weights_path = 'yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
     test_Video_path = 'input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
     output_path = 'output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
 
     img_size = 800 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
-    conf_thres = 0.4  # 신뢰도 문턱값(default : 0.4) : 해당 수치 중복도 이상은 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
-    iou_thres = 0.5  # iou 문턱값(default : 0.5) : 검출 박스의 iou(교집합) 정도
+    conf_thres = 0.6  # 신뢰도 문턱값(default : 0.4) : 해당 수치 검지율 이하는 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
+    iou_thres = 0.1  # iou 문턱값(default : 0.5) : 검출 박스의 iou(교집합) 정도
     classes_type = [0, 1, 2] # 데이터셋 및 학습된 모델 클래스 종류
 
     # Control Image 존재 여부 확인 후, 없으면 생성, 있으면 이미지 경로 도출
@@ -451,7 +453,7 @@ if __name__ == '__main__':
                         help='output video codec (verify ffmpeg support)')
     parser.add_argument('--device', default='0',
                         help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view-vid', action='store_false',
+    parser.add_argument('--view-vid', action='store_false', default=True,
                         help='display results')
     parser.add_argument('--save-vid', action='store_true', default=output_path,
                         help='display results')
@@ -460,7 +462,7 @@ if __name__ == '__main__':
     # class 0 is person
     parser.add_argument('--classes', nargs='+', type=int,
                         default=classes_type, help='filter by class')
-    parser.add_argument('--agnostic-nms', action='store_true',
+    parser.add_argument('--agnostic-nms', action='store_true', default=True,
                         help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true',
                         help='augmented inference')

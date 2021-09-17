@@ -480,16 +480,16 @@ if __name__ == '__main__':
     
     # 여기에 각 파라미터 정의하고 실행
     model_size = 'yolov5s'
-    exp_num = '20210601' # 실험 이름
+    exp_num = '20210719' # 실험 이름
 
     model_weights = './weights/'+model_size+'.pt' # 사전훈련의 베이스로 사용한 모델 : Pre-Trained 모델 파일 경로 (pt 형식 파일)
-    cfg = './models/'+model_size +'.yaml' #yolov5 아키텍처 파일 경로 
+    cfg = './models/'+model_size +'.yaml' # yolov5 아키텍처 파일 경로 
     data_yaml = 'data/CustomData.yaml'  # 학습할 커스텀 데이터에 대한 정보
     hyp_custom = 'data/hyp.custom.yaml' # 하이퍼파라미터 커스텀 버전 (기본 : 'data/hyp.scratch.yaml')
     
-    epochs = 2500 # 에폭 수 : 학습 몇 회 해볼건지
+    epochs = 2500 # 에폭 수 : 학습 몇 회 해볼건지.
     batch_size = 32 # 배치 사이즈 값 : 컴퓨터의 성능에 따라 선택
-    img_size = 800 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
+    img_size = 1280 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
     train_result_folder = './train_result' # 훈련된 데이터들이 들어갈 장소
 
     # train.txt, val.txt 파일 생성
