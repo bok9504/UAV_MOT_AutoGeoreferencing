@@ -1,4 +1,5 @@
 import time
+import numpy as np
 
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
 
@@ -38,6 +39,22 @@ def track_time(func):
         exec_time = end_time - start_time
         print('"{}" function : {:.4f} sec'.format(func.__name__, exec_time))
     return new_func
+
+def is_divide_pt(x11,y11, x12,y12, x21,y21, x22,y22):
+    f1= (x12-x11)*(y21-y11) - (y12-y11)*(x21-x11)
+    f2= (x12-x11)*(y22-y11) - (y12-y11)*(x22-x11)
+    if np.sign(f1)*np.sign(f2) < 0 :
+        return True
+    else:
+        return False
+
+def is_cross_pt(x11,y11, x12,y12, x21,y21, x22,y22):
+    b1 = is_divide_pt(x11,y11, x12,y12, x21,y21, x22,y22)
+    b2 = is_divide_pt(x21,y21, x22,y22, x11,y11, x12,y12)
+    if b1 and b2:
+        return True
+    else:
+        return False
 
 # import sys
 # sys.path.append("..")

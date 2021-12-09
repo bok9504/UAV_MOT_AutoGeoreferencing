@@ -1,21 +1,23 @@
 import sys
-sys.path.insert(0, './yolov5')
+sys.path.insert(0, './MOT/yolov5')
 
-from yolov5.models.experimental import attempt_load
-from yolov5.utils.datasets import LoadImages, LoadStreams
-from yolov5.utils.general import check_img_size, non_max_suppression, scale_coords, \
-    check_imshow
-from yolov5.utils.torch_utils import select_device, time_synchronized
-from deep_sort_pytorch.utils.parser import get_config
-from deep_sort_pytorch.deep_sort import DeepSort
+from MOT.yolov5.models.experimental import attempt_load
+from MOT.yolov5.utils.datasets import LoadImages, LoadStreams
+from MOT.yolov5.utils.general import check_img_size, non_max_suppression, scale_coords, check_imshow
+from MOT.yolov5.utils.torch_utils import select_device, time_synchronized
+from MOT.deep_sort_pytorch.utils.parser import get_config
+from MOT.deep_sort_pytorch.deep_sort import DeepSort
+from MOT.detect_track_obj import Detected_Obj
+from MOT.detect_track_obj import Tracked_Obj
 
-from image_registration.create_control_img import get_control_img
-from image_registration.feature_matching import image_registration, run_image_registration
-from image_registration.update_control_Image import update_ctlImg, point_dist
+from Pre_processing.create_source_img import get_source_img
+from Pre_processing.camera_calibration import check_caliVideo
+
+from Georeferencing.image_registration.feature_matching import run_image_registration
+from Georeferencing.image_registration.update_source_Image import update_srcImg, point_dist
 
 from utilss import bbox_ccwh
 from utilss import bbox_ltrd
-from utilss import compute_color_for_labels
 
 import argparse
 import os
@@ -31,136 +33,9 @@ import cv2
 import torch
 import torch.backends.cudnn as cudnn
 
-def is_divide_pt(x11,y11, x12,y12, x21,y21, x22,y22):
-    f1= (x12-x11)*(y21-y11) - (y12-y11)*(x21-x11)
-    f2= (x12-x11)*(y22-y11) - (y12-y11)*(x22-x11)
-    if np.sign(f1)*np.sign(f2) < 0 :
-        return True
-    else:
-        return False
-def is_cross_pt(x11,y11, x12,y12, x21,y21, x22,y22):
-    b1 = is_divide_pt(x11,y11, x12,y12, x21,y21, x22,y22)
-    b2 = is_divide_pt(x21,y21, x22,y22, x11,y11, x12,y12)
-    if b1 and b2:
-        return True
-    else:
-        return False
-
-class Obj_info:
-    def __init__(self, bbox, cls):
-        self.bbox = bbox
-        self.cls = cls
-        self.label = []
-
-    # Draw Vehicle bounding boxes
-    def draw_box(self, img, offset=(0,0)):
-        for i, box in enumerate(self.bbox):
-            x1, y1, x2, y2 = [int(i) for i in box]
-            x1 += offset[0]
-            x2 += offset[0]
-            y1 += offset[1]
-            y2 += offset[1]
-            clsss = int(self.cls[i][0])
-            color = compute_color_for_labels(clsss)
-            t_size = cv2.getTextSize(self.label[i], cv2.FONT_HERSHEY_PLAIN, 1, 1)[0]
-            cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
-            cv2.rectangle(
-                img, (x1 + t_size[0] + 3, y1 - (t_size[1] + 4)), (x1, y1), color, -1)
-            cv2.putText(img, self.label[i], (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [255,255,255], 2)
-        return img
-
-class Detected_Obj(Obj_info):
-    def __init__(self, bbox, cls, confs):
-        Obj_info.__init__(self, bbox, cls)
-        self.confs = confs
-
-    # Setting bounding boxes label for each vehicle
-    def set_label(self):
-        for i in range(len(self.bbox)):
-            clsss = int(self.cls[i][0])
-            confss = float(self.confs[i][0])*100
-            self.label.append('{} {:.2f}%'.format(namess[clsss], confss))
-
-class Tracked_Obj(Obj_info):
-    def __init__(self, bbox, cls, id, pts):
-        Obj_info.__init__(self, bbox, cls)
-        self.id = id
-        self.speed = []
-        # Create the list of center points
-        self.pts = pts
-        for i, box in enumerate(self.bbox):
-            center = (int(((box[0]) + (box[2]))/2), int(((box[1]) + (box[3]))/2))
-            self.pts[self.id[i]].append(center)
-        maxNum = max([len(self.pts[x]) for x in range(len(self.pts))])
-        [self.pts[y].append(None) for y in range(len(self.pts)) if len(self.pts[y]) != maxNum]
-
-    # Setting bounding boxes label for each vehicle
-    def set_label(self):
-        for i in range(len(self.bbox)):
-            clsss = int(self.cls[i][0])
-            ids = int(self.id[i])       
-            if len(self.speed)==0 or self.speed[i] is None: # None speed information (just tracked)
-                self.label.append('{}-{}'.format(namess[clsss], ids))
-            else:   # speed information exists
-                vehSpd = int(abs(self.speed[i]))
-                self.label.append("{}-{} Speed:{}km/h".format(namess[clsss], ids, vehSpd))
-
-    # Tracking path visualization
-    def Visualize_Track(self, img):
-        for i in range(len(self.id)):
-            ptsTrk = self.pts[self.id[i]].copy()
-            while None in ptsTrk:
-                ptsTrk.remove(None)
-            for j in range(1, len(ptsTrk)):
-                cv2.line(img, (ptsTrk[j-1]), (ptsTrk[j]), (0,255,255), 5)
-        return img
-
-    # vehicle speed calculation
-    def calc_Vehicle_Speed(self, dist_ratio, spd_interval): # set fps using spd_interval
-        for i in range(len(self.id)):
-            ptss = self.pts[self.id[i]].copy()
-            curLoc = ptss.pop()
-            ptss.reverse()
-            if len(ptss) != 0:
-                for frmIdx, prevLoc in enumerate(ptss):
-                    if ((frmIdx+1)%(3*spd_interval)==0) & (prevLoc != None):break    # Get previous vehicle location and frame index
-                if frmIdx + 1 == len(ptss):   # Case of None previous vehicle location
-                    self.speed.append(None)
-                    continue
-                frmMove_len = np.sqrt( pow(prevLoc[0] - curLoc[0], 2) + pow(prevLoc[1] - curLoc[1], 2) )    # Moving length in video frame
-                geoMove_len = frmMove_len * dist_ratio      # Moving length in geo
-                self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / (frmIdx+1))
-        return self.speed
-
-    # traffic volume calculation
-    def calc_Volume(self, Counter_list, volume):
-        for i in range(len(self.id)):
-            ptss = self.pts[self.id[i]].copy()
-            curLoc = ptss.pop()
-            ptss.reverse()
-            if len(ptss) != 0:
-                for frmIdx, prevLoc in enumerate(ptss):
-                    if (prevLoc != None) and (frmIdx%2==1):break
-                if frmIdx + 1 == len(ptss): continue  # Case of None previous vehicle location
-                for cntIdx, Counter in Counter_list.items():
-                    if is_cross_pt(Counter[0][0], Counter[0][1], Counter[1][0], Counter[1][1], prevLoc[0], prevLoc[1], curLoc[0], curLoc[1]):
-                        volume[cntIdx][self.cls[i]] += 1
-                        volume[cntIdx][-1] += 1
-        return volume
-    
-    def draw_Volume(self, img, Counter_list, volume):
-        for counter in Counter_list.values():
-            img = cv2.line(img, tuple(counter[0]), tuple(counter[1]), (0,0,0), 5,-1)
-        for cntIdx in range(len(Counter_list)):
-            cv2.putText(img, 'count_{}_total : {}'.format(cntIdx+1, volume[cntIdx][-1]), (100+400*cntIdx, 110), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 0, 0), 2) # 카운팅 되는거 보이게
-            cv2.putText(img, 'count_{}_{} : {}'.format(cntIdx+1, namess[0], volume[cntIdx][0]), (100+400*cntIdx, 140), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
-            cv2.putText(img, 'count_{}_{} : {}'.format(cntIdx+1, namess[1], volume[cntIdx][1]), (100+400*cntIdx, 170), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
-            cv2.putText(img, 'count_{}_{} : {}'.format(cntIdx+1, namess[2], volume[cntIdx][2]), (100+400*cntIdx, 200), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
-
-
 def detect(opt):
-    out, source, weights, view_vid, save_vid, save_txt, imgsz, ctl_img = \
-        opt.output, opt.source, opt.weights, opt.view_vid, opt.save_vid, opt.save_txt, opt.img_size, opt.ctl_img
+    out, source, weights, view_vid, save_vid, save_txt, imgsz, src_img = \
+        opt.output, opt.source, opt.weights, opt.view_vid, opt.save_vid, opt.save_txt, opt.img_size, opt.src_img
     yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch, line_swch, density_swch, headway_swch = \
         opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.line_swch, opt.density_swch, opt.headway_swch
     webcam = source == '0' or source.startswith(
@@ -215,10 +90,8 @@ def detect(opt):
     save_path = str(Path(out))
     txt_path = str(Path(out)) + '/results.txt'
 
-    global vid_cap
-
     # Get control point & counter point
-    with open('get_traffic_parameter/'+test_Video+'_point.yaml') as f:
+    with open('data/data_setting/control_point/'+test_Video+'_point.yaml') as f:
         data = yaml.load(f.read()) 
     frm_point = data['frm_point']
     geo_point = data['geo_point']  
@@ -267,20 +140,20 @@ def detect(opt):
             if img_registration_swch:
                 # image registration
                 centerPoint = []
-                for ctl_img_path in ctl_img:
-                    centerPoint.append(run_image_registration(im0, ctl_img_path, 'brisk', 'bf', 'knnmatch'))
-                ctlImg_centerPoint = update_ctlImg(centerPoint)
+                for src_img_path in src_img:
+                    centerPoint.append(run_image_registration(im0, src_img_path, 'brisk', 'bf', 'knnmatch'))
+                srcImg_centerPoint = update_srcImg(centerPoint)
                 # Updating Frame Points
                 if frame_idx==0:
-                    datum_dist_frm = ctlImg_centerPoint.get_datum_distance(frm_point)
-                frm_point = ctlImg_centerPoint.update_point(frm_point, datum_dist_frm)
+                    datum_dist_frm = srcImg_centerPoint.get_datum_distance(frm_point)
+                frm_point = srcImg_centerPoint.update_point(frm_point, datum_dist_frm)
                 for pointNum in range(len(frm_point)):
                     im0 = cv2.circle(im0, frm_point[pointNum], 10, (0,0,0),-1)
                 # Updating Counters
                 if volume_swch:
                     if frame_idx==0:
-                        datum_dist_cnt = ctlImg_centerPoint.get_datum_distance(Counter_list)
-                    Counter_list = ctlImg_centerPoint.update_point(Counter_list, datum_dist_cnt)
+                        datum_dist_cnt = srcImg_centerPoint.get_datum_distance(Counter_list)
+                    Counter_list = srcImg_centerPoint.update_point(Counter_list, datum_dist_cnt)
 
             if det is not None and len(det):
                 # Rescale boxes from img_size to im0 size
@@ -311,7 +184,7 @@ def detect(opt):
                 # draw detected boxes for visualization
                 if yolo_swch:
                     detect_result = Detected_Obj(bbox_xyxy, clss, confs)
-                    detect_result.set_label()
+                    detect_result.set_label(namess)
                     detect_result.draw_box(im0)
 
                 xywhs = torch.Tensor(bbox_xywh)
@@ -341,13 +214,13 @@ def detect(opt):
                         track_result.Visualize_Track(im0)
                     # calculate vehicle speed
                     if speed_swch and img_registration_swch:
-                        veh_speed = track_result.calc_Vehicle_Speed(dist_ratio, 1)
+                        veh_speed = track_result.calc_Vehicle_Speed(vid_cap, dist_ratio, 1)
                     # calculate vehicle speed
                     if volume_swch and img_registration_swch:
                         if frame_idx % 2 == 0:
                             volume = track_result.calc_Volume(Counter_list, volume)
-                        track_result.draw_Volume(im0, Counter_list, volume)
-                    track_result.set_label()
+                        track_result.draw_Volume(im0, Counter_list, volume, namess)
+                    track_result.set_label(namess)
                     track_result.draw_box(im0)
 
                 # Write MOT compliant results to file
@@ -359,7 +232,7 @@ def detect(opt):
                         bbox_h = output[3]
                         cls_id = output[4]
                         identity = output[-1]
-                        if speed_swch and len(veh_speed)!=0 and veh_speed[j]!=None: spd = veh_speed[j] and img_registration_swch
+                        if speed_swch and img_registration_swch and len(veh_speed)!=0 and veh_speed[j]!=None and img_registration_swch: spd = veh_speed[j]
                         else: spd = -1
                         with open(txt_path, 'a') as f:
                             f.write(('%g ' * 10 + '\n') % (frame_idx, identity, bbox_left,
@@ -407,12 +280,13 @@ if __name__ == '__main__':
     # YoloV5 + DeepSORT 트래킹 수행
 
     # 표출 기능 선택
+    camera_calibrate_switch = True  # 카메라 캘리브레이션
     yolo_switch = False              # 차량 객체 검지 표출
     deepsort_switch = True         # 차량 객체 추적 표출
-    img_registration_switch = False # 영상 정합 수행
+    img_registration_switch = True # 영상 정합 수행
     VehTrack_switch = False         # 차량 주행궤적 추출
-    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
-    volume_switch = False           # 교통량 추출      (영상정합 필요)
+    speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
+    volume_switch = True           # 교통량 추출      (영상정합 필요)
     line_switch = False             # 차선 추출        (영상정합 필요)
     density_switch = False          # 밀도 추출
     headway_switch = False          # 차두간격 추출
@@ -421,19 +295,25 @@ if __name__ == '__main__':
     test_Video = 'DJI_0255_speed' # 테스트 영상 이름
     exp_num = 'ubuntu_test' # 실험 이름
 
-    weights_path = 'yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
-    test_Video_path = 'input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
-    output_path = 'output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
+    weights_path = 'MOT/yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
+    test_Video_path = 'data/input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
+    output_path = 'data/output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
+    cali_npz = 'data/data_setting/calibration_info/mavic2_pro.npz'       # 카메라 캘리브레이션 정보
 
     img_size = 800 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
     conf_thres = 0.6  # 신뢰도 문턱값(default : 0.4) : 해당 수치 검지율 이하는 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
     iou_thres = 0.1  # iou 문턱값(default : 0.5) : 검출 박스의 iou(교집합) 정도
     classes_type = [0, 1, 2] # 데이터셋 및 학습된 모델 클래스 종류
 
-    # Control Image 존재 여부 확인 후, 없으면 생성, 있으면 이미지 경로 도출
+    # 카메라 캘리브레이션 수행
+    if camera_calibrate_switch:
+        check_caliVideo(test_Video, cali_npz)
+        test_Video_path = 'data/input_video/calibrated_video/' + test_Video + '.MP4'
+
+    # Source Image 존재 여부 확인 후, 없으면 생성, 있으면 이미지 경로 도출
     if img_registration_switch:
-        Control_Img_path = get_control_img(test_Video)
-    else:Control_Img_path=[]
+        Source_Img_path = get_source_img(test_Video)
+    else:Source_Img_path=[]
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str,
@@ -467,9 +347,9 @@ if __name__ == '__main__':
     parser.add_argument('--augment', action='store_true',
                         help='augmented inference')
     parser.add_argument("--config_deepsort", type=str,
-                        default="deep_sort_pytorch/configs/deep_sort.yaml")
+                        default="MOT/deep_sort_pytorch/configs/deep_sort.yaml")
     
-    parser.add_argument("--ctl_img", default=Control_Img_path, help='Control Images path')
+    parser.add_argument("--src_img", default=Source_Img_path, help='Source Images path')
     parser.add_argument("--yolo_swch", default=yolo_switch, help='Yolo on & off')
     parser.add_argument("--deepsort_swch", default=deepsort_switch, help='DeepSORT on & off')
     parser.add_argument("--img_registration_swch", default=img_registration_switch, help='Image Registration on & off')
