@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import yaml
 import os
-from Enter_GeoCoordinates import Tk_GeoPoint
+from Pre_processing.Enter_GeoCoordinates import Tk_GeoPoint
 
 refPt = []
 cap_img = []
@@ -15,7 +15,7 @@ geoPt = []
  - 키보드 's'  : 선택된 포인트 저장
  - 키보드 'q'  : 저장하지 않고 GUI 프로그램 종료
 '''
-def create_control_point(img_path):
+def create_control_point(img_path, control_point_file):
 
     print()
     print('The function selecting control points ')
@@ -54,7 +54,6 @@ def create_control_point(img_path):
         elif event == cv2.EVENT_MOUSEWHEEL:pass
 
     image = cv2.imread(img_path)
-    crop_path = os.path.splitext(img_path)
     clone = image.copy()
     cap_img.append(clone)
     cv2.namedWindow('draw', cv2.WINDOW_NORMAL)
@@ -79,17 +78,23 @@ def create_control_point(img_path):
         elif key == ord('s'):
             pointsFile = {'frm_point': {i: x for i, x in enumerate(refPt)}}
             pointsFile['geo_point'] = {i: x for i, x in enumerate(geoPt)}
-            filePath = crop_path[0] + '_point.yaml'
-            with open(filePath, 'w') as file:
+            with open(control_point_file, 'w') as file:
                 yaml.dump(pointsFile, file, sort_keys=False)
             break
         elif key == ord('q'):
             break
     cv2.destroyAllWindows()
 
-'''
-이후 메인함수에 입력될 함수 작업 추가 요망
-- yaml file 존재하는지 확인
-- 작동유무 확인
-
-'''
+def get_control_point(test_Video):
+    control_point_file = 'data/data_setting/control_point/' + test_Video + '_point.yaml'
+    first_frm = 'data/data_setting/source_img/' + test_Video + '/' + test_Video +'.jpg'
+    
+    if os.path.exists(control_point_file):
+        print()
+        create_new_srcimg = input('If you wanna set new control point, Write yes : ')
+        if create_new_srcimg =='yes':
+            create_control_point(first_frm, control_point_file)
+        else:
+            pass
+    else:
+        create_control_point(first_frm, control_point_file)

@@ -10,8 +10,9 @@ from MOT.deep_sort_pytorch.deep_sort import DeepSort
 from MOT.detect_track_obj import Detected_Obj
 from MOT.detect_track_obj import Tracked_Obj
 
-from Pre_processing.create_source_img import get_source_img
 from Pre_processing.camera_calibration import check_caliVideo
+from Pre_processing.create_source_img import get_source_img
+from Pre_processing.create_control_point import get_control_point
 
 from Georeferencing.image_registration.feature_matching import run_image_registration
 from Georeferencing.image_registration.update_source_Image import update_srcImg, point_dist
@@ -90,18 +91,21 @@ def detect(opt):
     save_path = str(Path(out))
     txt_path = str(Path(out)) + '/results.txt'
 
-    # Get control point & counter point
-    with open('data/data_setting/control_point/'+test_Video+'_point.yaml') as f:
-        data = yaml.load(f.read()) 
-    frm_point = data['frm_point']
-    geo_point = data['geo_point']  
-    Counter_list = data['counter']
-
     # Create the list of center points using deque
     from _collections import deque
     pts = [deque(maxlen=200) for _ in range(10000)]
-    volume = np.zeros((len(Counter_list),len(namess)+1))
 
+    # Get control point & counter point
+    if img_registration_swch:
+        with open('data/data_setting/control_point/'+test_Video+'_point.yaml') as f:
+            data = yaml.load(f.read()) 
+        frm_point = data['frm_point']
+        geo_point = data['geo_point']
+        if volume_swch:
+            Counter_list = data['counter']
+            volume = np.zeros((len(Counter_list),len(namess)+1))
+
+    # Start loop
     for frame_idx, (path, img, im0s, vid_cap) in enumerate(dataset):
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -277,7 +281,10 @@ def detect(opt):
 
 if __name__ == '__main__':
 
-    # YoloV5 + DeepSORT 트래킹 수행
+    '''
+    다중객체추적 알고리즘을 활용한 드론 항공영상 기반 미시적 교통데이터 추출
+    Microscopic Traffic Parameters Estimation from UAV Video Using Multiple Object Tracking of Deep Learning-based
+    '''
 
     # 표출 기능 선택
     camera_calibrate_switch = True  # 카메라 캘리브레이션
@@ -286,13 +293,13 @@ if __name__ == '__main__':
     img_registration_switch = True # 영상 정합 수행
     VehTrack_switch = False         # 차량 주행궤적 추출
     speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
-    volume_switch = True           # 교통량 추출      (영상정합 필요)
+    volume_switch = False           # 교통량 추출      (영상정합 필요)
     line_switch = False             # 차선 추출        (영상정합 필요)
     density_switch = False          # 밀도 추출
     headway_switch = False          # 차두간격 추출
 
     # 트래킹 파라미터 설정
-    test_Video = 'DJI_0255_speed' # 테스트 영상 이름
+    test_Video = 'DJI_0165' # 테스트 영상 이름
     exp_num = 'ubuntu_test' # 실험 이름
 
     weights_path = 'MOT/yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
@@ -313,6 +320,7 @@ if __name__ == '__main__':
     # Source Image 존재 여부 확인 후, 없으면 생성, 있으면 이미지 경로 도출
     if img_registration_switch:
         Source_Img_path = get_source_img(test_Video)
+        get_control_point(test_Video)
     else:Source_Img_path=[]
 
     parser = argparse.ArgumentParser()
