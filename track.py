@@ -315,7 +315,8 @@ if __name__ == '__main__':
     # 카메라 캘리브레이션 수행
     if camera_calibrate_switch:
         check_caliVideo(test_Video, cali_npz)
-        test_Video_path = 'data/input_video/calibrated_video/' + test_Video + '.MP4'
+        test_Video = test_Video + '_cali'
+        test_Video_path = 'data/input_video/' + test_Video + '.MP4'
 
     # Source Image 존재 여부 확인 후, 없으면 생성, 있으면 이미지 경로 도출
     if img_registration_switch:

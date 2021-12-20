@@ -47,9 +47,9 @@ def writeVideo(filePath, cali_Video_path, path_npz):
     cap.release()
     out.release()
 
-def check_caliVideo(test_Video, cali_npz):
-    cali_Video_path = 'data/input_video/calibrated_video/' + test_Video + '.MP4'
+def check_caliVideo(test_Video, cali_npz): 
     test_Video_path = 'data/input_video/' + test_Video + '.MP4'
+    cali_Video_path = 'data/input_video/' + test_Video + '_cali.MP4'
     if os.path.exists(cali_Video_path) and\
          cv2.VideoCapture(cali_Video_path).get(cv2.CAP_PROP_FRAME_COUNT)+1 \
             == cv2.VideoCapture(test_Video_path).get(cv2.CAP_PROP_FRAME_COUNT):pass
