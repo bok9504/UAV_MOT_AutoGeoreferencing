@@ -27,7 +27,6 @@ import shutil
 import time
 import yaml
 import numpy as np
-from haversine import haversine
 from scipy import stats
 from pathlib import Path
 import cv2
@@ -280,11 +279,6 @@ def detect(opt):
 
 
 if __name__ == '__main__':
-
-    '''
-    다중객체추적 알고리즘을 활용한 드론 항공영상 기반 미시적 교통데이터 추출
-    Microscopic Traffic Parameters Estimation from UAV Video Using Multiple Object Tracking of Deep Learning-based
-    '''
 
     # 표출 기능 선택
     camera_calibrate_switch = True  # 카메라 캘리브레이션
