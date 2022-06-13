@@ -290,7 +290,7 @@ if __name__ == '__main__':
     https://doi.org/10.12815/kits.2021.20.5.83
     '''
     # Choose Function (True/False)
-    camera_calibrate_switch = True  # 카메라 캘리브레이션
+    camera_calibrate_switch = False  # 카메라 캘리브레이션
     yolo_switch = False              # 차량 객체 검지 표출
     deepsort_switch = True         # 차량 객체 추적 표출
     img_registration_switch = True # 영상 정합 수행
@@ -300,9 +300,10 @@ if __name__ == '__main__':
 
     # Setting Parameters
     test_Video = 'DJI_0165' # 테스트 영상 이름
-    exp_num = 'ubuntu_test' # 실험 이름
+    exp_num = 'map_matching' # 실험 이름
 
-    weights_path = 'MOT/yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
+    weights_path = 'MOT/yolov5/train_result/dataset_v5/20220201_554/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
+    # weights_path = 'MOT/yolov5/train_result/20220607_capston2/weights/best.pt'
     test_Video_path = 'data/input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
     output_path = 'data/output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
     cali_npz = 'data/data_setting/calibration_info/mavic2_pro.npz'       # 카메라 캘리브레이션 정보
@@ -343,7 +344,7 @@ if __name__ == '__main__':
                         help='output video codec (verify ffmpeg support)')
     parser.add_argument('--device', default='0',
                         help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view-vid', action='store_false', default=True,
+    parser.add_argument('--view_vid', action='store_false', default=True,
                         help='display results')
     parser.add_argument('--save-vid', action='store_true', default=output_path,
                         help='display results')

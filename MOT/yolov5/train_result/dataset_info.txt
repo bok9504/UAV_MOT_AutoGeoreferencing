@@ -1,0 +1,9 @@
+creating:KangSan,SuHeon
+dataset_v1 : 0148,0156,0168,0170,0224,260,300 (class:car,bus,truck)
+creating:SangEon,SungWo,ChangeJun
+dataset_v2 : 0148,0156,0168,0170,0224,260,300 (class:car,bus,truck,bicycle)
+dataset_v3 : 0148,0156,0168,0170,0224,260,300 (class:car,bus,truck)
+dataset_v4 : 0148,0156,0168,0170,0224,260,300, 0554, 0571, 0572 (class:car,bus,truck,bicycle)
+dataset_v5 : 0148,0156,0168,0170,0224,260,300, 0554, 0571, 0572 (class:car,bus,truck)
+dataset_v6 : 0148,0156,0168,0170,0224,260,300, 0554, 0571, 0572, 0490, 0491, 0542, 0555, 0574 (class:car,bus,truck,bicycle)
+dataset_v7 : 0148,0156,0168,0170,0224,260,300, 0554, 0571, 0572, 0490, 0491, 0542, 0555, 0574 (class:car,bus,truck)
