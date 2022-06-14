@@ -480,24 +480,31 @@ if __name__ == '__main__':
     
     # 여기에 각 파라미터 정의하고 실행
     model_size = 'yolov5s'
-    exp_num = '20210719' # 실험 이름
+    exp_num = '202206013_capston' # 실험 이름
 
     model_weights = './weights/'+model_size+'.pt' # 사전훈련의 베이스로 사용한 모델 : Pre-Trained 모델 파일 경로 (pt 형식 파일)
     cfg = './models/'+model_size +'.yaml' # yolov5 아키텍처 파일 경로 
     data_yaml = 'data/CustomData.yaml'  # 학습할 커스텀 데이터에 대한 정보
     hyp_custom = 'data/hyp.custom.yaml' # 하이퍼파라미터 커스텀 버전 (기본 : 'data/hyp.scratch.yaml')
+    with_bicycle = False
+    Adam_or_SGD = False # true -> adam, False -> SGD
     
     epochs = 2500 # 에폭 수 : 학습 몇 회 해볼건지.
-    batch_size = 32 # 배치 사이즈 값 : 컴퓨터의 성능에 따라 선택
-    img_size = 1280 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
+    batch_size = 48 # 배치 사이즈 값 : 컴퓨터의 성능에 따라 선택
+    img_size = 800 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
     train_result_folder = './train_result' # 훈련된 데이터들이 들어갈 장소
 
-    # train.txt, val.txt 파일 생성
-    dataset = os.listdir('./dataset/')
-    img_list = []
-    for data in dataset:
-        img = glob(os.getcwd() + '/dataset/{}/*.jpg'.format(data))
-        img_list.extend(img)
+    # # train.txt, val.txt 파일 생성
+    # dataset = os.listdir('./dataset/')
+    # img_list = []
+    # for data in dataset:
+    #     if with_bicycle:img_path = '/dataset/{}/*.jpg'.format(data)
+    #     else:img_path = '/dataset/without_bicycle/{}/*.jpg'.format(data)
+    #     img = glob(os.getcwd() + img_path)
+    #     img_list.extend(img)
+    img_path = '/dataset_capston/train_data2/*.jpg'
+    img_list = glob(os.getcwd() + img_path)
+
     train_img_list, val_img_list = train_test_split(img_list, test_size=0.2, random_state=2000)
     with open('./data/train.txt', 'w+') as f:
         f.write('\n'.join(train_img_list) + '\n')
@@ -530,7 +537,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%%')
     parser.add_argument('--single-cls', action='store_true', help='train multi-class data as single-class')
-    parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
+    parser.add_argument('--adam', default=Adam_or_SGD,action='store_true', help='use torch.optim.Adam() optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')

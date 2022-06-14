@@ -36,8 +36,8 @@ import torch.backends.cudnn as cudnn
 def detect(opt):
     out, source, weights, view_vid, save_vid, save_txt, imgsz, src_img = \
         opt.output, opt.source, opt.weights, opt.view_vid, opt.save_vid, opt.save_txt, opt.img_size, opt.src_img
-    yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch, line_swch, density_swch, headway_swch = \
-        opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.line_swch, opt.density_swch, opt.headway_swch
+    yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch = \
+        opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch
     webcam = source == '0' or source.startswith(
         'rtsp') or source.startswith('http') or source.endswith('.txt')
 
@@ -280,23 +280,30 @@ def detect(opt):
 
 if __name__ == '__main__':
 
-    # 표출 기능 선택
-    camera_calibrate_switch = True  # 카메라 캘리브레이션
+    '''
+    다중객체추적 알고리즘을 활용한 드론 항공영상 기반 미시적 교통데이터 추출 (2021)
+    Microscopic Traffic Parameters Estimation from UAV Video Using Multiple Object Tracking of Deep Learning-based (2021)
+
+    Bokyung Jung, Boogi Park, Sunghyuk Seo, Sanghoon Bae
+
+    The Journal of The Korea Institute of Intelligent Transport Systems, vol.20, no.5, pp.83~99
+    https://doi.org/10.12815/kits.2021.20.5.83
+    '''
+    # Choose Function (True/False)
+    camera_calibrate_switch = False  # 카메라 캘리브레이션
     yolo_switch = False              # 차량 객체 검지 표출
     deepsort_switch = True         # 차량 객체 추적 표출
-    img_registration_switch = True # 영상 정합 수행
+    img_registration_switch = False # 영상 정합 수행
     VehTrack_switch = False         # 차량 주행궤적 추출
-    speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
+    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
     volume_switch = False           # 교통량 추출      (영상정합 필요)
-    line_switch = False             # 차선 추출        (영상정합 필요)
-    density_switch = False          # 밀도 추출
-    headway_switch = False          # 차두간격 추출
 
-    # 트래킹 파라미터 설정
-    test_Video = 'DJI_0165' # 테스트 영상 이름
-    exp_num = 'ubuntu_test' # 실험 이름
+    # Setting Parameters
+    test_Video = 'capston_vid/DJI_0589' # 테스트 영상 이름
+    exp_num = 'capston_testVid' # 실험 이름
 
-    weights_path = 'MOT/yolov5/train_result/20210601/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
+    # weights_path = 'MOT/yolov5/train_result/dataset_v5/20220201_554/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
+    weights_path = 'MOT/yolov5/train_result/202206013_capston/weights/best.pt'
     test_Video_path = 'data/input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
     output_path = 'data/output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
     cali_npz = 'data/data_setting/calibration_info/mavic2_pro.npz'       # 카메라 캘리브레이션 정보
@@ -305,6 +312,7 @@ if __name__ == '__main__':
     conf_thres = 0.6  # 신뢰도 문턱값(default : 0.4) : 해당 수치 검지율 이하는 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
     iou_thres = 0.1  # iou 문턱값(default : 0.5) : 검출 박스의 iou(교집합) 정도
     classes_type = [0, 1, 2] # 데이터셋 및 학습된 모델 클래스 종류
+
 
     # 카메라 캘리브레이션 수행
     if camera_calibrate_switch:
@@ -336,7 +344,7 @@ if __name__ == '__main__':
                         help='output video codec (verify ffmpeg support)')
     parser.add_argument('--device', default='0',
                         help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view-vid', action='store_false', default=True,
+    parser.add_argument('--view_vid', action='store_false', default=True,
                         help='display results')
     parser.add_argument('--save-vid', action='store_true', default=output_path,
                         help='display results')
@@ -359,9 +367,6 @@ if __name__ == '__main__':
     parser.add_argument("--vehtrk_swch", default=VehTrack_switch, help='Vehicle Track on & off')
     parser.add_argument("--speed_swch", default=speed_switch, help='Speed on & off')
     parser.add_argument("--volume_swch", default=volume_switch, help='Volume on & off')
-    parser.add_argument("--line_swch", default=line_switch, help='Line on & off')
-    parser.add_argument("--density_swch", default=density_switch, help='Density on & off')
-    parser.add_argument("--headway_swch", default=headway_switch, help='Headway on & off')
     args = parser.parse_args()
     args.img_size = check_img_size(args.img_size)
     print(args)
