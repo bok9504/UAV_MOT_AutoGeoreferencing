@@ -490,7 +490,7 @@ if __name__ == '__main__':
     Adam_or_SGD = False # true -> adam, False -> SGD
     
     epochs = 2500 # 에폭 수 : 학습 몇 회 해볼건지.
-    batch_size = 32 # 배치 사이즈 값 : 컴퓨터의 성능에 따라 선택
+    batch_size = 48 # 배치 사이즈 값 : 컴퓨터의 성능에 따라 선택
     img_size = 800 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
     train_result_folder = './train_result' # 훈련된 데이터들이 들어갈 장소
 

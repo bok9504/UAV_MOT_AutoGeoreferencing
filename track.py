@@ -293,17 +293,17 @@ if __name__ == '__main__':
     camera_calibrate_switch = False  # 카메라 캘리브레이션
     yolo_switch = False              # 차량 객체 검지 표출
     deepsort_switch = True         # 차량 객체 추적 표출
-    img_registration_switch = True # 영상 정합 수행
+    img_registration_switch = False # 영상 정합 수행
     VehTrack_switch = False         # 차량 주행궤적 추출
-    speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
+    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
     volume_switch = False           # 교통량 추출      (영상정합 필요)
 
     # Setting Parameters
-    test_Video = 'DJI_0165' # 테스트 영상 이름
-    exp_num = 'map_matching' # 실험 이름
+    test_Video = 'capston_vid/DJI_0589' # 테스트 영상 이름
+    exp_num = 'capston_testVid' # 실험 이름
 
-    weights_path = 'MOT/yolov5/train_result/dataset_v5/20220201_554/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
-    # weights_path = 'MOT/yolov5/train_result/20220607_capston2/weights/best.pt'
+    # weights_path = 'MOT/yolov5/train_result/dataset_v5/20220201_554/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
+    weights_path = 'MOT/yolov5/train_result/202206013_capston/weights/best.pt'
     test_Video_path = 'data/input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
     output_path = 'data/output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
     cali_npz = 'data/data_setting/calibration_info/mavic2_pro.npz'       # 카메라 캘리브레이션 정보
