@@ -480,11 +480,12 @@ if __name__ == '__main__':
     
     # 여기에 각 파라미터 정의하고 실행
     model_size = 'yolov5s'
-    exp_num = '202206014' # 실험 이름
+    exp_num = '20221129_helmet_original' # 실험 이름
 
     model_weights = './weights/'+model_size+'.pt' # 사전훈련의 베이스로 사용한 모델 : Pre-Trained 모델 파일 경로 (pt 형식 파일)
     cfg = './models/'+model_size +'.yaml' # yolov5 아키텍처 파일 경로 
-    data_yaml = 'data/CustomData.yaml'  # 학습할 커스텀 데이터에 대한 정보
+    #data_yaml = 'data/CustomData.yaml'  # 학습할 커스텀 데이터에 대한 정보
+    data_yaml = 'data/CustomData_helmet.yaml'  # 학습할 커스텀 데이터에 대한 정보
     hyp_custom = 'data/hyp.custom.yaml' # 하이퍼파라미터 커스텀 버전 (기본 : 'data/hyp.scratch.yaml')
     with_bicycle = False
     Adam_or_SGD = False # true -> adam, False -> SGD
@@ -495,15 +496,16 @@ if __name__ == '__main__':
     train_result_folder = './train_result' # 훈련된 데이터들이 들어갈 장소
 
     # train.txt, val.txt 파일 생성
-    dataset = os.listdir('./dataset/')
     img_list = []
+    if with_bicycle:
+        dataset = os.listdir('./dataset/dataset_trainfolder_withbicycle/')
+    else:
+        dataset = os.listdir('./dataset/dataset_trainfolder/original/')
     for data in dataset:
-        if with_bicycle:img_path = '/dataset/{}/*.jpg'.format(data)
-        else:img_path = '/dataset/without_bicycle/{}/*.jpg'.format(data)
+        if with_bicycle:img_path = '/dataset/dataset_trainfolder_withbicycle/{}/*.jpg'.format(data)
+        else:img_path = '/dataset/dataset_trainfolder/original/{}/*.jpg'.format(data)
         img = glob(os.getcwd() + img_path)
         img_list.extend(img)
-    # img_path = '/dataset_capston/train_data2/*.jpg'
-    # img_list = glob(os.getcwd() + img_path)
 
     train_img_list, val_img_list = train_test_split(img_list, test_size=0.2, random_state=2000)
     with open('./data/train.txt', 'w+') as f:

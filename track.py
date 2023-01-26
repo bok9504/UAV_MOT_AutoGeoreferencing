@@ -13,11 +13,13 @@ from MOT.detect_track_obj import Tracked_Obj
 from Pre_processing.camera_calibration import check_caliVideo
 from Pre_processing.create_source_img import get_source_img
 from Pre_processing.create_control_point import get_control_point
+from Pre_processing.create_counter import get_counter_point
 
 from Georeferencing.image_registration.feature_matching import run_image_registration
 from Georeferencing.image_registration.update_source_Image import update_srcImg, point_dist
 
 from utilss import bbox_ccwh
+from utilss import bbox_cc
 from utilss import bbox_ltrd
 
 import argparse
@@ -29,6 +31,8 @@ import yaml
 import numpy as np
 from scipy import stats
 from pathlib import Path
+from rasterio.transform import from_gcps
+from rasterio.control import GroundControlPoint as GCP
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
@@ -36,8 +40,8 @@ import torch.backends.cudnn as cudnn
 def detect(opt):
     out, source, weights, view_vid, save_vid, save_txt, imgsz, src_img = \
         opt.output, opt.source, opt.weights, opt.view_vid, opt.save_vid, opt.save_txt, opt.img_size, opt.src_img
-    yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch = \
-        opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch
+    yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch, Georeferencing_swch = \
+        opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.Georeferencing_swch
     webcam = source == '0' or source.startswith(
         'rtsp') or source.startswith('http') or source.endswith('.txt')
 
@@ -100,8 +104,13 @@ def detect(opt):
             data = yaml.load(f.read()) 
         frm_point = data['frm_point']
         geo_point = data['geo_point']
+        if Georeferencing_swch and img_registration_swch:
+            gcps = [GCP(frm_point[x][0], frm_point[x][1], geo_point[x][0], geo_point[x][1]) for x in range(len(frm_point))]
+            geo_transform = from_gcps(gcps)
         if volume_swch:
-            Counter_list = data['counter']
+            with open('data/data_setting/counter_point/'+test_Video+'_point.yaml') as f:
+                data = yaml.load(f.read())
+            Counter_list = {0 : [data['counter'][0], data['counter'][1]], 1 : [data['counter'][2], data['counter'][3]]}
             volume = np.zeros((len(Counter_list),len(namess)+1))
 
     # Start loop
@@ -205,6 +214,13 @@ def detect(opt):
                 [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
                 ...]
                 """
+                # Calculates the Geo point for each vehicle
+                if Georeferencing_swch and img_registration_swch:
+                    geo_bbox = []
+                    for output in outputs:
+                        x_c, y_c = bbox_cc(output[0:4])
+                        geo_Cpoint = geo_transform * (y_c, x_c)
+                        geo_bbox.append(geo_Cpoint)
 
                 # draw tracked boxes for visualization
                 if deepsort_swch and len(outputs) > 0:
@@ -216,9 +232,11 @@ def detect(opt):
                     if vehtrk_swch:
                         track_result.Visualize_Track(im0)
                     # calculate vehicle speed
-                    if speed_swch and img_registration_swch:
+                    if speed_swch and img_registration_swch and not Georeferencing_swch:
                         veh_speed = track_result.calc_Vehicle_Speed(vid_cap, dist_ratio, 1)
-                    # calculate vehicle speed
+                    elif speed_swch and img_registration_swch and Georeferencing_swch:
+                        veh_speed = track_result.geo_Vehicle_Speed(vid_cap, geo_transform, 1)
+                    # calculate vehicle volume
                     if volume_swch and img_registration_swch:
                         if frame_idx % 2 == 0:
                             volume = track_result.calc_Volume(Counter_list, volume)
@@ -231,15 +249,21 @@ def detect(opt):
                     for j, output in enumerate(outputs):
                         bbox_left = output[0]
                         bbox_top = output[1]
-                        bbox_w = output[2]
-                        bbox_h = output[3]
+                        bbox_right = output[2]
+                        bbox_down = output[3]
                         cls_id = output[4]
                         identity = output[-1]
-                        if speed_swch and img_registration_swch and len(veh_speed)!=0 and veh_speed[j]!=None and img_registration_swch: spd = veh_speed[j]
+                        if speed_swch and img_registration_swch and len(veh_speed)!=0 and veh_speed[j]!=None \
+                            and img_registration_swch: spd = veh_speed[j]
                         else: spd = -1
+                        if Georeferencing_swch and img_registration_swch:
+                            geo_x = geo_bbox[j][0]
+                            geo_y = geo_bbox[j][1]
+                        else: geo_x = geo_y = -1
+                            
                         with open(txt_path, 'a') as f:
-                            f.write(('%g ' * 10 + '\n') % (frame_idx, identity, bbox_left,
-                                                           bbox_top, bbox_w, bbox_h, cls_id, spd, -1, -1))  # label format
+                            f.write(('%g ' * 8 + '%f ' * 2 + '\n') % (frame_idx, identity, bbox_left,
+                                                           bbox_top, bbox_right, bbox_down, cls_id, spd, geo_x, geo_y))  # label format
 
             else:
                 deepsort.increment_ages()
@@ -293,23 +317,24 @@ if __name__ == '__main__':
     camera_calibrate_switch = False  # 카메라 캘리브레이션
     yolo_switch = False              # 차량 객체 검지 표출
     deepsort_switch = True         # 차량 객체 추적 표출
-    img_registration_switch = False # 영상 정합 수행
+    img_registration_switch = True # 영상 정합 수행
     VehTrack_switch = False         # 차량 주행궤적 추출
-    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
-    volume_switch = False           # 교통량 추출      (영상정합 필요)
+    speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
+    volume_switch = True           # 교통량 추출      (영상정합 필요)
+    Georeferencing_switch = True   # 지오레퍼런싱 (영상정합 필요)
 
     # Setting Parameters
-    test_Video = 'capston_vid/DJI_0589' # 테스트 영상 이름
-    exp_num = 'capston_testVid' # 실험 이름
+    test_Video = 'DJI_0260_speed' # 테스트 영상 이름
+    exp_num = 'test' # 실험 이름
 
-    # weights_path = 'MOT/yolov5/train_result/dataset_v5/20220201_554/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
-    weights_path = 'MOT/yolov5/train_result/202206013_capston/weights/best.pt'
+    # weights_path = 'MOT/yolov5/train_result/20221004_Campus2/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
+    weights_path = 'MOT/yolov5/train_result/dataset_v3/20220120/weights/best.pt'
     test_Video_path = 'data/input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
     output_path = 'data/output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
     cali_npz = 'data/data_setting/calibration_info/mavic2_pro.npz'       # 카메라 캘리브레이션 정보
 
     img_size = 800 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
-    conf_thres = 0.6  # 신뢰도 문턱값(default : 0.4) : 해당 수치 검지율 이하는 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
+    conf_thres = 0.504  # 신뢰도 문턱값(default : 0.4) : 해당 수치 검지율 이하는 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
     iou_thres = 0.1  # iou 문턱값(default : 0.5) : 검출 박스의 iou(교집합) 정도
     classes_type = [0, 1, 2] # 데이터셋 및 학습된 모델 클래스 종류
 
@@ -324,6 +349,7 @@ if __name__ == '__main__':
     if img_registration_switch:
         Source_Img_path = get_source_img(test_Video)
         get_control_point(test_Video)
+        get_counter_point(test_Video)
     else:Source_Img_path=[]
 
     parser = argparse.ArgumentParser()
@@ -367,6 +393,7 @@ if __name__ == '__main__':
     parser.add_argument("--vehtrk_swch", default=VehTrack_switch, help='Vehicle Track on & off')
     parser.add_argument("--speed_swch", default=speed_switch, help='Speed on & off')
     parser.add_argument("--volume_swch", default=volume_switch, help='Volume on & off')
+    parser.add_argument("--Georeferencing_swch", default=Georeferencing_switch, help='Georeferencing on & off')
     args = parser.parse_args()
     args.img_size = check_img_size(args.img_size)
     print(args)

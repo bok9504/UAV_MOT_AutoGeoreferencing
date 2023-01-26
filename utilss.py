@@ -31,6 +31,16 @@ def bbox_ltrd(*xyxy):
     bbox_down = max([xyxy[1].item(), xyxy[3].item()])
     return bbox_left, bbox_top, bbox_right, bbox_down
 
+def bbox_cc(output):
+    """" Calculates the relative bounding box from absolute pixel values. """
+    bbox_left = min([output[0], output[2]])
+    bbox_top = min([output[1], output[3]])
+    bbox_w = abs(output[0] - output[2])
+    bbox_h = abs(output[1] - output[3])
+    x_c = (bbox_left + bbox_w / 2)
+    y_c = (bbox_top + bbox_h / 2)
+    return x_c, y_c
+
 def track_time(func):
     def new_func(*args, **kwargs):
         start_time = time.time()

@@ -90,6 +90,24 @@ class Tracked_Obj(Obj_info):
                 self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / (frmIdx+1))
         return self.speed
 
+    # vehicle speed calculation based on Georeferencing
+    def geo_Vehicle_Speed(self, vid_cap, geo_transform, spd_interval): # set fps using spd_interval
+        for i in range(len(self.id)):
+            ptss = self.pts[self.id[i]].copy()
+            curLoc = ptss.pop()
+            ptss.reverse()
+            if len(ptss) != 0:
+                for frmIdx, prevLoc in enumerate(ptss):
+                    if ((frmIdx+1)%(3*spd_interval)==0) & (prevLoc != None):break    # Get previous vehicle location and frame index
+                if frmIdx + 1 == len(ptss):   # Case of None previous vehicle location
+                    self.speed.append(None)
+                    continue
+                geo_prevLoc = geo_transform * (prevLoc[1], prevLoc[0])
+                geo_curLoc = geo_transform * (curLoc[1], curLoc[0])
+                geoMove_len = np.sqrt( pow(geo_prevLoc[0] - geo_curLoc[0], 2) + pow(geo_prevLoc[1] - geo_curLoc[1], 2) )    # Moving length in video frame
+                self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / (frmIdx+1))
+        return self.speed
+
     # traffic volume calculation
     def calc_Volume(self, Counter_list, volume):
         for i in range(len(self.id)):
