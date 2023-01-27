@@ -73,7 +73,7 @@ YOLOv5와 DeepSort를 사용하여 Multiple Object Tracking을 수행하며, 개
 
 ## How to run
 
-1. track.py 옵션(Function) 세팅
+### 1. track.py 옵션(Function) 세팅
 - `track.py` 코드 내 main() 파일에 존재하는 `# Choose Function`에서 이용자가 원하는 옵션을 선택합니다. True로 세팅시 해당옵션을 사용하고, False로 세팅시 해당옵션을 끌 수 있습니다. 각 옵션별로 `./data/data_setting`에 존재하는 데이터가 필요한 경우가 있고 필요없는 경우가 존재합니다. 자세한 내용은 아래 후술됩니다.
 - `camera_calibrate_switch` 은 항공영상에 대한 카메라 캘리브레이션을 수행하여 보정된 동영상 자료를 획득할 수 있습니다. 하지만 GCP 설정이 달라 질 수 있음으로 영상정합이 필요한 경우 옵션을 끄는것을 추천합니다.
 - `yolo_switch`, `deepsort_switch`는 차량 검지와 추적 중 필요한 옵션을 선택할 수 있습니다. 다만 옵션선택은 동영상 내 표출 여부의 선택이며, 기본적으로 `track.py` 코드는 수행시, 객체 검지와 추적을 자동으로 수행합니다.
@@ -83,10 +83,10 @@ YOLOv5와 DeepSort를 사용하여 Multiple Object Tracking을 수행하며, 개
 - `volume_switch`는 교통량 검지기(counter)를 통과하는 차량을 카운팅하는 옵션입니다. 카운팅 결과는 비디오파일에 실시간으로 표출됩니다. 해당 옵션을 활성화하기 위해서는 `./data/data_setting`에 포함되는 `counter_point`를 보유해야합니다. `counter_point`를 설정하는 방법은 `4. 전처리 데이터 생성`에서 자세히 설명합니다.
 - `Georeferencing_switch`는 동영상의 모든 프레임에 자동으로 지오레퍼런싱을 수행하는 옵션입니다. 해당 옵션을 활성화할 시 생성되는 텍스트 파일에 개별 차량의 프레임별 경위도좌표가 추출됩니다. 
 
-2. track.py 파라미터 세팅
+### 2. track.py 파라미터 세팅
 - `track.py` 코드 내 main() 파일에 존재하는  `# Setting Parameters`에서 이용자가 원하는 옵션을 선택합니다. 테스트할 영상의 이름, 실험의 이름, 사용할 YOLO weight 파일의 경로, YOLO 검지 이미지 사이즈, 검지 confidence, iou thres 등을 설정해줍니다.
 
-3. `track.py` 실행
+### 3. `track.py` 실행
 
 cmd 창에 아래 코드를 실행합니다.
 
@@ -94,7 +94,7 @@ cmd 창에 아래 코드를 실행합니다.
 python track.py
 ```
 
-4. 전처리 데이터 생성
+### 4. 전처리 데이터 생성
 - 지오레퍼런싱과 영상정합을 위해 필요한 `source_img`, `control_point`, `counter_point`를 생성하는 파트입니다. `track.py` 실행하면 아래와 같은 명령어가 출력됩니다.
 
 ```
@@ -127,12 +127,12 @@ If you wanna create new counter point, Write yes :
 
 ```
 다중객체추적 알고리즘을 활용한 드론 항공영상 기반 미시적 교통데이터 추출 (2021)
-    Microscopic Traffic Parameters Estimation from UAV Video Using Multiple Object Tracking of Deep Learning-based (2021)
+Microscopic Traffic Parameters Estimation from UAV Video Using Multiple Object Tracking of Deep Learning-based (2021)
 
-    Bokyung Jung, Boogi Park, Sunghyuk Seo, Sanghoon Bae
+Bokyung Jung, Boogi Park, Sunghyuk Seo, Sanghoon Bae
 
-    The Journal of The Korea Institute of Intelligent Transport Systems, vol.20, no.5, pp.83~99
-    https://doi.org/10.12815/kits.2021.20.5.83
+The Journal of The Korea Institute of Intelligent Transport Systems, vol.20, no.5, pp.83~99
+https://doi.org/10.12815/kits.2021.20.5.83
 ```
 
 지오레퍼런싱을 활용한 연구결과는 현재 게재절차 진행 중인 `드론영상 기반 자율주행차량용 LDM 콘텐츠 구축 : 차로변경 행태를 중심으로` 논문에서 확인할 수 있습니다. 추후 업데이트 하도록 하겠습니다.
