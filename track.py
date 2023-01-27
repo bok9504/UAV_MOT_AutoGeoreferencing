@@ -304,30 +304,20 @@ def detect(opt):
 
 if __name__ == '__main__':
 
-    '''
-    다중객체추적 알고리즘을 활용한 드론 항공영상 기반 미시적 교통데이터 추출 (2021)
-    Microscopic Traffic Parameters Estimation from UAV Video Using Multiple Object Tracking of Deep Learning-based (2021)
-
-    Bokyung Jung, Boogi Park, Sunghyuk Seo, Sanghoon Bae
-
-    The Journal of The Korea Institute of Intelligent Transport Systems, vol.20, no.5, pp.83~99
-    https://doi.org/10.12815/kits.2021.20.5.83
-    '''
     # Choose Function (True/False)
     camera_calibrate_switch = False  # 카메라 캘리브레이션
     yolo_switch = False              # 차량 객체 검지 표출
     deepsort_switch = True         # 차량 객체 추적 표출
-    img_registration_switch = True # 영상 정합 수행
     VehTrack_switch = False         # 차량 주행궤적 추출
+    img_registration_switch = True # 영상 정합 수행
     speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
     volume_switch = True           # 교통량 추출      (영상정합 필요)
     Georeferencing_switch = True   # 지오레퍼런싱 (영상정합 필요)
 
     # Setting Parameters
-    test_Video = 'DJI_0260_speed' # 테스트 영상 이름
+    test_Video = 'sample_video' # 테스트 영상 이름
     exp_num = 'test' # 실험 이름
 
-    # weights_path = 'MOT/yolov5/train_result/20221004_Campus2/weights/best.pt' # 사용할 weights (Yolov5 학습결과로 나온 웨이트 사용)
     weights_path = 'MOT/yolov5/train_result/dataset_v3/20220120/weights/best.pt'
     test_Video_path = 'data/input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
     output_path = 'data/output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
@@ -345,7 +335,7 @@ if __name__ == '__main__':
         test_Video = test_Video + '_cali'
         test_Video_path = 'data/input_video/' + test_Video + '.MP4'
 
-    # Source Image 존재 여부 확인 후, 없으면 생성, 있으면 이미지 경로 도출
+    # Source Image, control_point, counter_point 존재 여부 확인 후, 없으면 생성, 있으면 데이터 로드
     if img_registration_switch:
         Source_Img_path = get_source_img(test_Video)
         get_control_point(test_Video)
