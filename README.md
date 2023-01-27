@@ -51,21 +51,21 @@ YOLOv5와 DeepSort를 사용하여 Multiple Object Tracking을 수행하며, 개
 ```
 
 
-1. data
+### 1. data
 - `data` 파일에는 `data_setting`, `input_video`, `output_folder` 폴더가 포함되어 있습니다.
 - `data_setting`에는 본 코드의 옵션을 사용하기 위해 필요한 데이터 정보가 포함됩니다. calibration_info를 제외한 나머지 옵션은 `track.py` 코드의 실행 이후 생성 가능합니다.
 - `input_video`에는 입력으로 활용할 드론 항공영상이 포함됩니다. `sample_video.MP4` 파일이 포함되어 있습니다.
 - `output_folder`에는 `track.py` 코드의 실행 결과물이 자동으로 저장됩니다. 실행 결과물은 드론 항공영상에 대한 비디오 파일과, 데이터가 추출된 텍스트 파일을 포함합니다.
 
-2. Georeferencing/image_registration
+### 2. Georeferencing/image_registration
 - `Georeferencing/image_registration` 폴더에는 지오레퍼런싱을 위한 코드파일이 포함되어 있습니다.
 - `feature_matching.py` 코드는 feature matching 기반의 영상정합을 위한 코드입니다. `track.py` 코드 내 옵션 선택을 통하여 descriptor, Matcher, matching_func을 임의적으로 선택할 수 있습니다.
 - `update_source_Image.py` 코드는 삼변측량을 통한 GCP의 갱신을 수행하는 코드입니다.
 
-3. MOT
+### 3. MOT
 - `MOT` 폴더는 Multiple Object Tracking을 위한 폴더입니다. 기본적으로  PyTorch YOLOv5 (https://github.com/ultralytics/yolov5)과 Yolov5_DeepSort_Pytorch (https://github.com/mikel-brostrom/Yolov5_DeepSort_Pytorch)를 따릅니다.
 
-4. Pre_processing
+### 4. Pre_processing
 - `Pre_processing` 폴더는 `./data/data_setting`에 포함되는 데이터를 생성해주는 코드를 포함합니다. 본 코드들은 `track.py` 코드와 연동되어 `track.py`의 실행 시, GUI 프로그램을 통해 `./data/data_setting`에 포함될 데이터를 생성할 수 있습니다.
 - `create_*.py` 코드들은 각각 control_point, counter_point, source_img 데이터를 생성하기 위한 코드입니다. `Enter_GeoCoordinates.py` 코드와 연동되어 GUI 기반의 데이터 생성을 수행합니다.
 - `camera_calibration.py` 코드는 이용자의 카메라의 보정값을 보유시 카메라 캘리브레이션을 수행하는 코드입니다. 본 레파지토리에 포함된 `./data/data_setting/mavic2_pro.npz`는 본 연구에 사용된 드론인 MAVIC2 PRO 카메라의 보정값입니다.
@@ -118,7 +118,8 @@ If you wanna create new counter point, Write yes :
  - 다음과 같은 절차를 GCP 개수 만큼 반복하여줍니다. 선택된 GCP를 저장하기 위해서는 Source image와 같이 's' 버튼을, 삭제는 'r' 버튼을, GUI 프로그램 종료는 'q' 버튼을 입력합니다.
 
  3) Counter Point
- - `counter_point`는 
+ - `counter_point`는 교통량 검지기를 통과하는 차량을 카운팅 하기위해 활용됩니다. 총 2개의 교통량 검지기를 설치할 수 있습니다. 마찬가지로 GUI 프로그램을 활용하여 설치하고자 하는 지점에 마우스로 클릭하면 교통량 검지기가 빨간선으로 설치됩니다. 설치된 빨간선을 통과하는 차량은 해당 검지기에 차종별로 카운팅이 수행됩니다.
+ - 선택된 교통량 검지기를 저장하기 위해서는 마찬가지로 's' 버튼을, 삭제는 'r' 버튼을, GUI 프로그램 종료는 'q' 버튼을 입력합니다.
 
 
 ## Description
@@ -136,27 +137,3 @@ https://doi.org/10.12815/kits.2021.20.5.83
 ```
 
 지오레퍼런싱을 활용한 연구결과는 현재 게재절차 진행 중인 `드론영상 기반 자율주행차량용 LDM 콘텐츠 구축 : 차로변경 행태를 중심으로` 논문에서 확인할 수 있습니다. 추후 업데이트 하도록 하겠습니다.
-
-## Tracking
-
-Tracking can be run on most video formats
-
-```bash
-python3 track.py --source ...
-```
-
-- Video:  `--source file.mp4`
-- Webcam:  `--source 0`
-- RTSP stream:  `--source rtsp://170.93.143.139/rtplive/470011e600ef003a004ee33696235daa`
-- HTTP stream:  `--source http://wmccpinetop.axiscam.net/mjpg/video.mjpg`
-
-MOT compliant results can be saved to `inference/output` by 
-
-```bash
-python3 track.py --source ... --save-txt
-```
-
-## Other information
-
-For more detailed information about the algorithms and their corresponding lisences used in this project access their official github implementations.
-
