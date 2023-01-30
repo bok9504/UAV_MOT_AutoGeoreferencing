@@ -27,16 +27,21 @@
 
 storage.googleapis.com
 runs/*
-data/*
-!data/images/zidane.jpg
-!data/images/bus.jpg
-!data/coco.names
-!data/coco_paper.names
-!data/coco.data
-!data/coco_*.data
-!data/coco_*.txt
-!data/trainvalno5k.shapes
-!data/*.sh
+data/data_setting/map_data/*
+data/data_setting/*/*.yaml
+data/data_setting/*/*/*.yaml
+data/input_video/*
+data/output_folder/*
+
+!data/data_setting/control_point/sample_video_point.yaml
+!data/data_setting/counter_point/sample_video_point.yaml
+!data/data_setting/source_img/sample_video/*
+#!data/input_video/sample_video.MP4
+#!data/output_folder/sample_video_test/*
+
+MOT/yolov5/train_result/*
+!MOT/yolov5/train_result/dataset_v3/20220120/*
+MOT/yolov5/dataset/*
 
 pycocotools/*
 results*.txt
