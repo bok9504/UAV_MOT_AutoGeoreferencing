@@ -36,7 +36,7 @@ data/output_folder/*
 !data/data_setting/control_point/sample_video_point.yaml
 !data/data_setting/counter_point/sample_video_point.yaml
 !data/data_setting/source_img/sample_video/*
-#!data/input_video/sample_video.MP4
+!data/input_video/sample_video.MP4
 #!data/output_folder/sample_video_test/*
 
 MOT/yolov5/train_result/*
