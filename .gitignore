@@ -37,14 +37,15 @@ data/output_folder/*
 !data/data_setting/counter_point/sample_video_point.yaml
 !data/data_setting/source_img/sample_video/*
 !data/input_video/sample_video.MP4
-!data/output_folder/sample_video_test/*
+!data/output_folder/sample_video_test/sample_video.MP4
+!data/output_folder/sample_video_test/results.txt
 
 MOT/yolov5/train_result/*
 !MOT/yolov5/train_result/dataset_v3/20220120/*
 MOT/yolov5/dataset/*
 
 pycocotools/*
-results*.txt
+# results*.txt
 gcp_test*.sh
 
 # Datasets -------------------------------------------------------------------------------------------------------------
