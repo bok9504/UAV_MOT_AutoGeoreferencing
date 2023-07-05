@@ -13,7 +13,8 @@ YOLOv5와 DeepSort를 사용하여 Multiple Object Tracking을 수행하며, 개
 
 ## Requirements
 
-본 문서의 검지 파트는 PyTorch YOLOv5 (https://github.com/ultralytics/yolov5)를 사용합니다. 따라서 해당 문서의 `requirments.txt`를 따른 뒤 아래 코드를 실행하세요.
+본 문서를 활용하기위해서는 Python 3.9 버전을 사용해야합니다. 만일 3.9가 아닌 버전을 사용하면 추가적 종속성 해결이 필요할 수 있습니다.
+Python 3.9 환경에서 아래의 명령어를 실행하세요.
 
 `pip install -U -r requirements.txt`
 
@@ -32,10 +33,12 @@ YOLOv5와 DeepSort를 사용하여 Multiple Object Tracking을 수행하며, 개
 아래의 weight 파일을 링크로부터 다운로드받은 이후, 각각의 경로에 저장하세요.
 
 ckpt.t7
+
 다운로드 링크 : https://drive.google.com/file/d/1FPGXaGYR75cWZWTktvhFTuc2uWVEUVCH/view?usp=sharing
 저장 경로 : 'MOT/deep_sort_pytorch/deep_sort/deep/checkpoint/'
 
 yolo_weight.pt
+
 다운로드 링크 : https://drive.google.com/file/d/1hLx_QjdmyVUzB0F_ZqwfVnbtfHI6XndQ/view?usp=sharing
 저장 경로 : 'MOT/yolov5/weights/'
 
