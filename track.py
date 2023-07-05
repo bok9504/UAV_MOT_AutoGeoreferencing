@@ -318,15 +318,16 @@ if __name__ == '__main__':
     test_Video = 'sample_video' # 테스트 영상 이름
     exp_num = 'test' # 실험 이름
 
-    weights_path = 'MOT/yolov5/train_result/dataset_v3/20220120/weights/best.pt'
+    weights_path = 'MOT/yolov5/weights/yolo_weight.pt'
     test_Video_path = 'data/input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
     output_path = 'data/output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
     cali_npz = 'data/data_setting/calibration_info/mavic2_pro.npz'       # 카메라 캘리브레이션 정보
 
     img_size = 800 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
-    conf_thres = 0.504  # 신뢰도 문턱값(default : 0.4) : 해당 수치 검지율 이하는 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
+    conf_thres = 0.478  # 신뢰도 문턱값(default : 0.4) : 해당 수치 검지율 이하는 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
     iou_thres = 0.1  # iou 문턱값(default : 0.5) : 검출 박스의 iou(교집합) 정도
     classes_type = [0, 1, 2] # 데이터셋 및 학습된 모델 클래스 종류
+    device = 'cpu'
 
 
     # 카메라 캘리브레이션 수행
@@ -358,7 +359,7 @@ if __name__ == '__main__':
                         default=iou_thres, help='IOU threshold for NMS')
     parser.add_argument('--fourcc', type=str, default='mp4v',
                         help='output video codec (verify ffmpeg support)')
-    parser.add_argument('--device', default='0',
+    parser.add_argument('--device', default=device,
                         help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view_vid', action='store_false', default=True,
                         help='display results')
