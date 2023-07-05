@@ -28,6 +28,16 @@ YOLOv5와 DeepSort를 사용하여 Multiple Object Tracking을 수행하며, 개
 
 `docker push bok9504/uav_mot_autogeoreferencing:tagname`
 
+차량 객체 검지 모델과 추적 모델을 활용하기 위하여 YOLOv5와 DeepSORT의 weight 파일이 필요합니다.
+아래의 weight 파일을 링크로부터 다운로드받은 이후, 각각의 경로에 저장하세요.
+
+ckpt.t7
+다운로드 링크 : https://drive.google.com/file/d/1FPGXaGYR75cWZWTktvhFTuc2uWVEUVCH/view?usp=sharing
+저장 경로 : 'MOT/deep_sort_pytorch/deep_sort/deep/checkpoint/'
+
+yolo_weight.pt
+다운로드 링크 : https://drive.google.com/file/d/1hLx_QjdmyVUzB0F_ZqwfVnbtfHI6XndQ/view?usp=sharing
+저장 경로 : 'MOT/yolov5/weights/'
 
 ## File Structure
 
