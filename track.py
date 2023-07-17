@@ -41,9 +41,9 @@ import torch.backends.cudnn as cudnn
 
 def detect(opt):
     project, source, weights, view_img, save_txt, imgsz, src_img, \
-        nosave, name, exist_ok, dnn, half, vid_stride, augment, classes, agnostic_nms, max_det, save_crop, line_thickness, save_conf, hide_labels, hide_conf, update, device, data, visualize = \
+        nosave, name, exist_ok, dnn, half, vid_stride, augment, classes, agnostic_nms, max_det, save_crop, line_thickness, save_conf, hide_labels, hide_conf, update, device, data, visualize, save_label = \
         opt.project, opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, opt.src_img, \
-            opt.nosave, opt.name, opt.exist_ok, opt.dnn, opt.half, opt.vid_stride, opt.augment, opt.classes, opt.agnostic_nms, opt.max_det, opt.save_crop, opt.line_thickness, opt.save_conf, opt.hide_labels, opt.hide_conf, opt.update, opt.device, opt.data, opt.visualize
+            opt.nosave, opt.name, opt.exist_ok, opt.dnn, opt.half, opt.vid_stride, opt.augment, opt.classes, opt.agnostic_nms, opt.max_det, opt.save_crop, opt.line_thickness, opt.save_conf, opt.hide_labels, opt.hide_conf, opt.update, opt.device, opt.data, opt.visualize, opt.save_label
     yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch, Georeferencing_swch = \
         opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.Georeferencing_swch
     webcam = source == '0' or source.startswith(
@@ -69,7 +69,8 @@ def detect(opt):
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
-    (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
+    (save_dir / 'labels' if save_label else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
+    txt_path = str(Path(save_dir)) + '/results.txt'
 
     # Load model
     device = select_device(device)
@@ -147,7 +148,7 @@ def detect(opt):
             
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # im.jpg
-            txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
+            label_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
             s += '%gx%g ' % im.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             imc = im0.copy() if save_crop else im0  # for save_crop
@@ -206,6 +207,11 @@ def detect(opt):
                     clss.append([cls.item()])
                     
                     # Write results
+                    if save_txt:  # Write to file
+                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                        line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
+                        with open(f'{label_path}.txt', 'a') as f:
+                            f.write(('%g ' * len(line)).rstrip() % line + '\n')
                     if save_img or save_crop or view_img:  # Add bbox to image
                         c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
@@ -323,8 +329,8 @@ def detect(opt):
     # Print results
     t = tuple(x.t / seen * 1E3 for x in dt)  # speeds per image
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
-    if save_txt or save_img:
-        s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
+    if save_label or save_img:
+        s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_label else ''
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
     if update:
         strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)
@@ -385,7 +391,8 @@ if __name__ == '__main__':
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default=device, help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view_img', action='store_true', help='show results')
-    parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
+    parser.add_argument('--save-txt', action='store_true', default=True, help='save results to *.txt')
+    parser.add_argument('--save-label', action='store_true', help='save label results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
     parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
