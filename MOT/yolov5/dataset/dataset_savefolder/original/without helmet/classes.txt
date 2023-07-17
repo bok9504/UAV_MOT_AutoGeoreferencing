@@ -1,2 +1,0 @@
-kb_with_helmet
-kb_without_helmet
