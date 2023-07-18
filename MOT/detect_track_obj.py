@@ -5,10 +5,11 @@ from utilss import compute_color_for_labels
 from utilss import is_cross_pt
 
 class Obj_info:
-    def __init__(self, bbox, cls):
+    def __init__(self, bbox, cls, namess):
         self.bbox = bbox
         self.cls = cls
         self.label = []
+        self.namess = namess
 
     # Draw Vehicle bounding boxes
     def draw_box(self, img, offset=(0,0)):
@@ -28,22 +29,23 @@ class Obj_info:
         return img
 
 class Detected_Obj(Obj_info):
-    def __init__(self, bbox, cls, confs):
-        Obj_info.__init__(self, bbox, cls)
+    def __init__(self, bbox, cls, namess, confs):
+        Obj_info.__init__(self, bbox, cls, namess)
         self.confs = confs
 
     # Setting bounding boxes label for each vehicle
-    def set_label(self, namess):
+    def set_label(self):
         for i in range(len(self.bbox)):
             clsss = int(self.cls[i][0])
             confss = float(self.confs[i][0])*100
-            self.label.append('{} {:.2f}%'.format(namess[clsss], confss))
+            self.label.append('{} {:.2f}%'.format(self.namess[clsss], confss))
 
 class Tracked_Obj(Obj_info):
-    def __init__(self, bbox, cls, id, pts):
-        Obj_info.__init__(self, bbox, cls)
+    def __init__(self, bbox, cls, namess, id, pts, volume):
+        Obj_info.__init__(self, bbox, cls, namess)
         self.id = id
         self.speed = []
+        self.volume = volume
         # Create the list of center points
         self.pts = pts
         for i, box in enumerate(self.bbox):
@@ -53,15 +55,15 @@ class Tracked_Obj(Obj_info):
         [self.pts[y].append(None) for y in range(len(self.pts)) if len(self.pts[y]) != maxNum]
 
     # Setting bounding boxes label for each vehicle
-    def set_label(self, namess):
+    def set_label(self):
         for i in range(len(self.bbox)):
             clsss = int(self.cls[i][0])
             ids = int(self.id[i])       
             if len(self.speed)==0 or self.speed[i] is None: # None speed information (just tracked)
-                self.label.append('{}-{}'.format(namess[clsss], ids))
+                self.label.append('{}-{}'.format(self.namess[clsss], ids))
             else:   # speed information exists
                 vehSpd = int(abs(self.speed[i]))
-                self.label.append("{}-{} Speed:{}km/h".format(namess[clsss], ids, vehSpd))
+                self.label.append("{}-{} Speed:{}km/h".format(self.namess[clsss], ids, vehSpd))
 
     # Tracking path visualization
     def Visualize_Track(self, img):
@@ -109,7 +111,7 @@ class Tracked_Obj(Obj_info):
         return self.speed
 
     # traffic volume calculation
-    def calc_Volume(self, Counter_list, volume):
+    def calc_Volume(self, Counter_list):
         for i in range(len(self.id)):
             ptss = self.pts[self.id[i]].copy()
             curLoc = ptss.pop()
@@ -120,15 +122,6 @@ class Tracked_Obj(Obj_info):
                 if frmIdx + 1 == len(ptss): continue  # Case of None previous vehicle location
                 for cntIdx, Counter in Counter_list.items():
                     if is_cross_pt(Counter[0][0], Counter[0][1], Counter[1][0], Counter[1][1], prevLoc[0], prevLoc[1], curLoc[0], curLoc[1]):
-                        volume[cntIdx][self.cls[i]] += 1
-                        volume[cntIdx][-1] += 1
-        return volume
-    
-    def draw_Volume(self, img, Counter_list, volume, namess):
-        for counter in Counter_list.values():
-            img = cv2.line(img, tuple(counter[0]), tuple(counter[1]), (0,0,0), 5,-1)
-        for cntIdx in range(len(Counter_list)):
-            cv2.putText(img, 'count_{}_total : {}'.format(cntIdx+1, volume[cntIdx][-1]), (100+400*cntIdx, 110), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 0, 0), 2) # 카운팅 되는거 보이게
-            cv2.putText(img, 'count_{}_{} : {}'.format(cntIdx+1, namess[0], volume[cntIdx][0]), (100+400*cntIdx, 140), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
-            cv2.putText(img, 'count_{}_{} : {}'.format(cntIdx+1, namess[1], volume[cntIdx][1]), (100+400*cntIdx, 170), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
-            cv2.putText(img, 'count_{}_{} : {}'.format(cntIdx+1, namess[2], volume[cntIdx][2]), (100+400*cntIdx, 200), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
+                        self.volume[cntIdx][self.cls[i]] += 1
+                        self.volume[cntIdx][-1] += 1
+        return self.volume

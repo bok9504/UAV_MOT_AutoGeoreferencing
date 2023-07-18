@@ -25,10 +25,7 @@ from utilss import bbox_cc
 from utilss import bbox_ltrd
 
 import argparse
-import os
 import platform
-import shutil
-import time
 import yaml
 import numpy as np
 from scipy import stats
@@ -180,6 +177,13 @@ def detect(opt):
                     if frame_idx==0:
                         datum_dist_cnt = srcImg_centerPoint.get_datum_distance(Counter_list)
                     Counter_list = srcImg_centerPoint.update_point(Counter_list, datum_dist_cnt)
+                    for counter in Counter_list.values():
+                        im0 = cv2.line(im0, tuple(counter[0]), tuple(counter[1]), (0,0,0), 5,-1)
+                    for cntIdx in range(len(Counter_list)):
+                        cv2.putText(im0, 'count_{}_total : {}'.format(cntIdx+1, volume[cntIdx][-1]), (100+400*cntIdx, 110), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 0, 0), 2) # 카운팅 되는거 보이게
+                        cv2.putText(im0, 'count_{}_{} : {}'.format(cntIdx+1, namess[0], volume[cntIdx][0]), (100+400*cntIdx, 140), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
+                        cv2.putText(im0, 'count_{}_{} : {}'.format(cntIdx+1, namess[1], volume[cntIdx][1]), (100+400*cntIdx, 170), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
+                        cv2.putText(im0, 'count_{}_{} : {}'.format(cntIdx+1, namess[2], volume[cntIdx][2]), (100+400*cntIdx, 200), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
 
             if len(det):
                 # Rescale boxes from img_size to im0 size
@@ -222,8 +226,8 @@ def detect(opt):
 
                 # draw detected boxes for visualization
                 if yolo_swch:
-                    detect_result = Detected_Obj(bbox_xyxy, clss, confs)
-                    detect_result.set_label(namess)
+                    detect_result = Detected_Obj(bbox_xyxy, clss, namess, confs)
+                    detect_result.set_label()
                     detect_result.draw_box(im0)
 
                 xywhs = torch.Tensor(bbox_xywh)
@@ -254,7 +258,7 @@ def detect(opt):
                     bbox_xyxy = outputs[:, :4]
                     cls_id = outputs[:,4:5]
                     identities = outputs[:, -1]
-                    track_result = Tracked_Obj(bbox_xyxy, cls_id, identities, pts)
+                    track_result = Tracked_Obj(bbox_xyxy, cls_id, namess, identities, pts, volume if volume_swch else None)
                     # draw vehicle trajectory for visualization
                     if vehtrk_swch:
                         track_result.Visualize_Track(im0)
@@ -266,9 +270,8 @@ def detect(opt):
                     # calculate vehicle volume
                     if volume_swch and img_registration_swch:
                         if frame_idx % 2 == 0:
-                            volume = track_result.calc_Volume(Counter_list, volume)
-                        track_result.draw_Volume(im0, Counter_list, volume, namess)
-                    track_result.set_label(namess)
+                            volume = track_result.calc_Volume(Counter_list)
+                    track_result.set_label()
                     track_result.draw_box(im0)
 
                 # Write MOT compliant results to file
@@ -311,8 +314,6 @@ def detect(opt):
                 if dataset.mode == 'image':
                     cv2.imwrite(save_path, im0)
                 else:  # 'video' or 'stream'
-                    print(len(vid_path))
-                    print(vid_path)
                     if vid_path[det_idx] != save_path:  # new video
                         vid_path[det_idx] = save_path
                         if isinstance(vid_writer[det_idx], cv2.VideoWriter):
@@ -347,8 +348,8 @@ if __name__ == '__main__':
     deepsort_switch = True         # 차량 객체 추적 표출
     VehTrack_switch = False         # 차량 주행궤적 추출
     img_registration_switch = True # 영상 정합 수행
-    speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
-    volume_switch = False           # 교통량 추출      (영상정합 필요)
+    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
+    volume_switch = True           # 교통량 추출      (영상정합 필요)
     Georeferencing_switch = False   # 지오레퍼런싱 (영상정합 필요)
 
     # Setting Parameters
