@@ -207,15 +207,16 @@ def detect(opt):
                     clss.append([cls.item()])
                     
                     # Write results
-                    if save_txt:  # Write to file
+                    if save_label:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
                         with open(f'{label_path}.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
-                    if save_img or save_crop or view_img:  # Add bbox to image
-                        c = int(cls)  # integer class
-                        label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                        annotator.box_label(xyxy, label, color=colors(c, True))
+                    if not hide_labels:
+                        if save_img or save_crop:  # Add bbox to image
+                            c = int(cls)  # integer class
+                            label = names[c] if hide_conf else f'{names[c]} {conf:.2f}'
+                            annotator.box_label(xyxy, label, color=colors(c, True))
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
@@ -302,7 +303,8 @@ def detect(opt):
                     cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
                     cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
                 cv2.imshow(str(p), im0)
-                cv2.waitKey(1)  # 1 millisecond
+                if cv2.waitKey(1) == ord('q'):  # q to quit
+                    raise StopIteration
 
             # Save results (image with detections)
             if save_img:
@@ -377,20 +379,16 @@ if __name__ == '__main__':
     else:Source_Img_path=[]
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str,
-                        default=weights_path, help='model.pt path')
-    # file/folder, 0 for webcam
-    parser.add_argument('--source', type=str,
-                        default=test_Video_path, help='source')
-    parser.add_argument('--output', type=str, default=output_path,
-                        help='output folder')  # output folder
+    parser.add_argument('--weights', type=str, default=weights_path, help='model.pt path')
+    parser.add_argument('--source', type=str, default=test_Video_path, help='source')   # file/folder, 0 for webcam
+    parser.add_argument('--output', type=str, default=output_path, help='output folder')  # output folder
     parser.add_argument('--data', type=str, default='data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--img-size', nargs='+', type=int, default=[img_size, img_size], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=conf_thres, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=iou_thres, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default=device, help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view_img', action='store_true', help='show results')
+    parser.add_argument('--view-img', action='store_true', help='show results')
     parser.add_argument('--save-txt', action='store_true', default=True, help='save results to *.txt')
     parser.add_argument('--save-label', action='store_true', help='save label results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
@@ -405,13 +403,12 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--line-thickness', default=3, type=int, help='bounding box thickness (pixels)')
-    parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
+    parser.add_argument('--hide-labels', default=True, action='store_true', help='hide labels')
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--vid-stride', type=int, default=1, help='video frame-rate stride')
-    parser.add_argument("--config_deepsort", type=str,
-                        default="MOT/deep_sort_pytorch/configs/deep_sort.yaml")
+    parser.add_argument("--config_deepsort", type=str, default="MOT/deep_sort_pytorch/configs/deep_sort.yaml")
     
     parser.add_argument("--src_img", default=Source_Img_path, help='Source Images path')
     parser.add_argument("--yolo_swch", default=yolo_switch, help='Yolo on & off')
