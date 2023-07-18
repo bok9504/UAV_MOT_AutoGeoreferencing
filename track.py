@@ -138,11 +138,11 @@ def detect(opt):
         # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
 
         # Process detections
-        for i, det in enumerate(pred):  # per image
+        for det_idx, det in enumerate(pred):  # per image
             seen += 1
             if webcam:  # batch_size >= 1
-                p, im0, frame = path[i], im0s[i].copy(), dataset.count
-                s += f'{i}: '
+                p, im0, frame = path[det_idx], im0s[det_idx].copy(), dataset.count
+                s += f'{det_idx}: '
             else:
                 p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
             
@@ -311,10 +311,12 @@ def detect(opt):
                 if dataset.mode == 'image':
                     cv2.imwrite(save_path, im0)
                 else:  # 'video' or 'stream'
-                    if vid_path[i] != save_path:  # new video
-                        vid_path[i] = save_path
-                        if isinstance(vid_writer[i], cv2.VideoWriter):
-                            vid_writer[i].release()  # release previous video writer
+                    print(len(vid_path))
+                    print(vid_path)
+                    if vid_path[det_idx] != save_path:  # new video
+                        vid_path[det_idx] = save_path
+                        if isinstance(vid_writer[det_idx], cv2.VideoWriter):
+                            vid_writer[det_idx].release()  # release previous video writer
                         if vid_cap:  # video
                             fps = vid_cap.get(cv2.CAP_PROP_FPS)
                             w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -322,8 +324,8 @@ def detect(opt):
                         else:  # stream
                             fps, w, h = 30, im0.shape[1], im0.shape[0]
                         save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
-                        vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                    vid_writer[i].write(im0)
+                        vid_writer[det_idx] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+                    vid_writer[det_idx].write(im0)
         
         # Print time (inference-only)
         LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{dt[1].dt * 1E3:.1f}ms")
@@ -341,11 +343,11 @@ if __name__ == '__main__':
 
     # Choose Function (True/False)
     camera_calibrate_switch = False  # 카메라 캘리브레이션
-    yolo_switch = True              # 차량 객체 검지 표출
-    deepsort_switch = False         # 차량 객체 추적 표출
+    yolo_switch = False              # 차량 객체 검지 표출
+    deepsort_switch = True         # 차량 객체 추적 표출
     VehTrack_switch = False         # 차량 주행궤적 추출
-    img_registration_switch = False # 영상 정합 수행
-    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
+    img_registration_switch = True # 영상 정합 수행
+    speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
     volume_switch = False           # 교통량 추출      (영상정합 필요)
     Georeferencing_switch = False   # 지오레퍼런싱 (영상정합 필요)
 
