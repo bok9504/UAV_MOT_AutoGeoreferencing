@@ -67,9 +67,9 @@ def create_source_img(img_path):
 
 # Source Image 존재여부 확인 및 생성코드
 # - 존재하더라도 'yes' 입력 시 새로 생성가능
-def get_source_img(test_Video):
+def get_source_img(test_Video, video_Ext):
     test_Video_folder = 'data/data_setting/source_img/' + test_Video
-    test_Video_path = 'data/input_video/' + test_Video + '.MP4'
+    test_Video_path = 'data/input_video/' + test_Video + video_Ext
     first_frm = test_Video_folder + '/{}.jpg'.format(test_Video)
     if os.path.exists(test_Video_folder):
         print()

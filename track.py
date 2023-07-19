@@ -68,6 +68,7 @@ def detect(opt):
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
     (save_dir / 'labels' if save_label else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
     txt_path = str(Path(save_dir)) + '/results.txt'
+    if volume_swch: volume_path = str(Path(save_dir)) + '/volume_img.jpg'
 
     # Load model
     device = select_device(device)
@@ -330,6 +331,10 @@ def detect(opt):
         
         # Print time (inference-only)
         LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{dt[1].dt * 1E3:.1f}ms")
+    
+    # Volume image save
+    if volume_swch:
+        cv2.imwrite(volume_path, im0)
 
     # Print results
     t = tuple(x.t / seen * 1E3 for x in dt)  # speeds per image
@@ -344,22 +349,22 @@ if __name__ == '__main__':
 
     # Choose Function (True/False)
     camera_calibrate_switch = False  # 카메라 캘리브레이션
-    yolo_switch = True              # 차량 객체 검지 표출
-    deepsort_switch = False         # 차량 객체 추적 표출
+    yolo_switch = False              # 차량 객체 검지 표출
+    deepsort_switch = True         # 차량 객체 추적 표출
     VehTrack_switch = False         # 차량 주행궤적 추출
-    img_registration_switch = False # 영상 정합 수행
-    speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
+    img_registration_switch = True # 영상 정합 수행
+    speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
     volume_switch = False           # 교통량 추출      (영상정합 필요)
-    Georeferencing_switch = False   # 지오레퍼런싱 (영상정합 필요)
+    Georeferencing_switch = True   # 지오레퍼런싱 (영상정합 필요)
 
     # Setting Parameters
-    test_Video = 'DJI_0005' # 테스트 영상 이름
+    test_Video = 'DJI_0004' # 테스트 영상 이름
     video_Ext = '.MOV'      # 테스트 영상 확장자
-    exp_num = 'test' # 실험 이름
+    exp_num = 'speed_Geo' # 실험 이름
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
     test_Video_path = 'data/input_video/' + test_Video + video_Ext  # 테스트할 영상 경로 입력
-    output_path = 'data/output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
+    output_path = 'data/output_folder/' + test_Video # 실험결과 저장 경로
     cali_npz = 'data/data_setting/calibration_info/mavic2_pro.npz'       # 카메라 캘리브레이션 정보
 
     img_size = 640 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
@@ -377,9 +382,9 @@ if __name__ == '__main__':
 
     # Source Image, control_point, counter_point 존재 여부 확인 후, 없으면 생성, 있으면 데이터 로드
     if img_registration_switch:
-        Source_Img_path = get_source_img(test_Video)
+        Source_Img_path = get_source_img(test_Video, video_Ext)
         get_control_point(test_Video)
-        get_counter_point(test_Video)
+        if volume_switch: get_counter_point(test_Video)
     else:Source_Img_path=[]
 
     parser = argparse.ArgumentParser()
@@ -404,7 +409,7 @@ if __name__ == '__main__':
     parser.add_argument('--visualize', action='store_true', help='visualize features')
     parser.add_argument('--update', action='store_true', help='update all models')
     parser.add_argument('--project', default=output_path, help='save results to project/name')
-    parser.add_argument('--name', default='exp', help='save results to project/name')
+    parser.add_argument('--name', default='exp_num', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--line-thickness', default=3, type=int, help='bounding box thickness (pixels)')
     parser.add_argument('--hide-labels', default=True, action='store_true', help='hide labels')

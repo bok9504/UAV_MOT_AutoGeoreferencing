@@ -15,7 +15,7 @@ geoPt = []
  - 키보드 's'  : 선택된 포인트 저장
  - 키보드 'q'  : 저장하지 않고 GUI 프로그램 종료
 '''
-def create_control_point(img_path, control_point_file):
+def create_control_point(img_path, control_point_file, control_point_img):
 
     print()
     print('The function selecting control points ')
@@ -80,21 +80,23 @@ def create_control_point(img_path, control_point_file):
             pointsFile['geo_point'] = {i: x for i, x in enumerate(geoPt)}
             with open(control_point_file, 'w') as file:
                 yaml.dump(pointsFile, file, sort_keys=False)
+            cv2.imwrite(control_point_img, image)
             break
         elif key == ord('q'):
             break
     cv2.destroyAllWindows()
 
 def get_control_point(test_Video):
-    control_point_file = 'data/data_setting/control_point/' + test_Video + '_point.yaml'
+    control_point_file = 'data/data_setting/control_point/' + test_Video + '/' + test_Video + '_point.yaml'
+    control_point_img = 'data/data_setting/control_point/'+ test_Video + '/' + test_Video + '_point.jpg'
     first_frm = 'data/data_setting/source_img/' + test_Video + '/' + test_Video +'.jpg'
     
     if os.path.exists(control_point_file):
         print()
         create_new_srcimg = input('If you wanna set new control point, Write yes : ')
         if create_new_srcimg =='yes':
-            create_control_point(first_frm, control_point_file)
+            create_control_point(first_frm, control_point_file, control_point_img)
         else:
             pass
     else:
-        create_control_point(first_frm, control_point_file)
+        create_control_point(first_frm, control_point_file, control_point_img)
