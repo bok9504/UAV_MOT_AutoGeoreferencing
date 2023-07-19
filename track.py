@@ -344,25 +344,26 @@ if __name__ == '__main__':
 
     # Choose Function (True/False)
     camera_calibrate_switch = False  # 카메라 캘리브레이션
-    yolo_switch = False              # 차량 객체 검지 표출
-    deepsort_switch = True         # 차량 객체 추적 표출
+    yolo_switch = True              # 차량 객체 검지 표출
+    deepsort_switch = False         # 차량 객체 추적 표출
     VehTrack_switch = False         # 차량 주행궤적 추출
-    img_registration_switch = True # 영상 정합 수행
+    img_registration_switch = False # 영상 정합 수행
     speed_switch = False            # 차량별 속도 추출 (영상정합 필요)
-    volume_switch = True           # 교통량 추출      (영상정합 필요)
+    volume_switch = False           # 교통량 추출      (영상정합 필요)
     Georeferencing_switch = False   # 지오레퍼런싱 (영상정합 필요)
 
     # Setting Parameters
-    test_Video = 'sample_video' # 테스트 영상 이름
+    test_Video = 'DJI_0005' # 테스트 영상 이름
+    video_Ext = '.MOV'      # 테스트 영상 확장자
     exp_num = 'test' # 실험 이름
 
-    weights_path = 'MOT/yolov5/weights/yolov5s.pt'
-    test_Video_path = 'data/input_video/' + test_Video + '.MP4'  # 테스트할 영상 경로 입력
+    weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
+    test_Video_path = 'data/input_video/' + test_Video + video_Ext  # 테스트할 영상 경로 입력
     output_path = 'data/output_folder/' + test_Video + '_' + exp_num  # 실험결과 저장 경로
     cali_npz = 'data/data_setting/calibration_info/mavic2_pro.npz'       # 카메라 캘리브레이션 정보
 
     img_size = 640 # 이미지 사이즈(default : 640) : 이미지의 크기를 조절(resizing)하여 검출하도록 만듦, 크면 클수록 검지율이 좋아지지만 FPS가 낮아짐
-    conf_thres = 0.4  # 신뢰도 문턱값(default : 0.4) : 해당 수치 검지율 이하는 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
+    conf_thres = 0.5  # 신뢰도 문턱값(default : 0.4) : 해당 수치 검지율 이하는 제거, Yolov5 학습결과(F1_curve.png) 보고 설정 But. 보통 경험적으로 설정
     iou_thres = 0.1  # iou 문턱값(default : 0.5) : 검출 박스의 iou(교집합) 정도
     classes_type = [0, 1, 2] # 데이터셋 및 학습된 모델 클래스 종류
     device = 'cpu'
@@ -372,7 +373,7 @@ if __name__ == '__main__':
     if camera_calibrate_switch:
         check_caliVideo(test_Video, cali_npz)
         test_Video = test_Video + '_cali'
-        test_Video_path = 'data/input_video/' + test_Video + '.MP4'
+        test_Video_path = 'data/input_video/' + test_Video + video_Ext
 
     # Source Image, control_point, counter_point 존재 여부 확인 후, 없으면 생성, 있으면 데이터 로드
     if img_registration_switch:
