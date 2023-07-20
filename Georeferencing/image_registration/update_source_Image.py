@@ -24,7 +24,7 @@ def intersectionPoint(point_list, dist_list):
 
     guess = (pointX[0], pointY[0] + dist_list[0])
 
-    ans = least_squares(eq, guess, ftol=None, xtol=None)
+    ans = least_squares(eq, guess, ftol=1e-8, xtol=1e-8)
     target_point = (round(ans.x[0]), round(ans.x[1]))
 
     return target_point

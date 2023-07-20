@@ -98,8 +98,8 @@ def detect(opt):
 
     # Get control point & counter point
     if img_registration_swch:
-        with open('data/data_setting/control_point/'+test_Video+'_point.yaml') as f:
-            data_CtP = yaml.load(f.read()) 
+        with open('data/data_setting/control_point/'+test_Video+'/'+test_Video+'_point.yaml') as f:
+            data_CtP = yaml.full_load(f.read()) 
         frm_point = data_CtP['frm_point']
         geo_point = data_CtP['geo_point']
         if Georeferencing_swch and img_registration_swch:
@@ -107,7 +107,7 @@ def detect(opt):
             geo_transform = from_gcps(gcps)
         if volume_swch:
             with open('data/data_setting/counter_point/'+test_Video+'_point.yaml') as f:
-                data_CoP = yaml.load(f.read())
+                data_CoP = yaml.full_load(f.read())
             Counter_list = {0 : [data_CoP['counter'][0], data_CoP['counter'][1]], 1 : [data_CoP['counter'][2], data_CoP['counter'][3]]}
             volume = np.zeros((len(Counter_list),len(namess)+1))
     
@@ -153,12 +153,11 @@ def detect(opt):
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
 
             if speed_swch:
-                print()
                 dist_ratio_list = []
                 for i in range(len(frm_point)):
                     for j in range(i+1, len(geo_point)):
                         dist_ratio_list.append(point_dist(geo_point[i],geo_point[j])/point_dist(frm_point[i],frm_point[j]))
-                dist_ratio = stats.trim_mean(dist_ratio_list, 0.5)
+                dist_ratio = stats.trim_mean(dist_ratio_list, 0.25)
 
             # Frame Points update using image registration
             if img_registration_swch:
@@ -265,9 +264,9 @@ def detect(opt):
                         track_result.Visualize_Track(im0)
                     # calculate vehicle speed
                     if speed_swch and img_registration_swch and not Georeferencing_swch:
-                        veh_speed = track_result.calc_Vehicle_Speed(vid_cap, dist_ratio, 1)
+                        veh_speed = track_result.calc_Vehicle_Speed(vid_cap, dist_ratio, 1)     # Frame interval 조절 가능
                     elif speed_swch and img_registration_swch and Georeferencing_swch:
-                        veh_speed = track_result.geo_Vehicle_Speed(vid_cap, geo_transform, 1)
+                        veh_speed = track_result.geo_Vehicle_Speed(vid_cap, geo_transform, 1)   # Frame interval 조절 가능
                     # calculate vehicle volume
                     if volume_swch and img_registration_swch:
                         if frame_idx % 2 == 0:
@@ -355,12 +354,12 @@ if __name__ == '__main__':
     img_registration_switch = True # 영상 정합 수행
     speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
     volume_switch = False           # 교통량 추출      (영상정합 필요)
-    Georeferencing_switch = True   # 지오레퍼런싱 (영상정합 필요)
+    Georeferencing_switch = False   # 지오레퍼런싱 (영상정합 필요)
 
     # Setting Parameters
     test_Video = 'DJI_0004' # 테스트 영상 이름
     video_Ext = '.MOV'      # 테스트 영상 확장자
-    exp_num = 'speed_Geo' # 실험 이름
+    exp_num = 'exp_230720' # 실험 이름
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
     test_Video_path = 'data/input_video/' + test_Video + video_Ext  # 테스트할 영상 경로 입력
@@ -409,7 +408,7 @@ if __name__ == '__main__':
     parser.add_argument('--visualize', action='store_true', help='visualize features')
     parser.add_argument('--update', action='store_true', help='update all models')
     parser.add_argument('--project', default=output_path, help='save results to project/name')
-    parser.add_argument('--name', default='exp_num', help='save results to project/name')
+    parser.add_argument('--name', default=exp_num, help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--line-thickness', default=3, type=int, help='bounding box thickness (pixels)')
     parser.add_argument('--hide-labels', default=True, action='store_true', help='hide labels')
