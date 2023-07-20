@@ -30,23 +30,23 @@ class image_registration:
         
         self.gray_img = [gray1, gray2]
 
-    def description(self, thresh=30):
+    def description(self, thresh=30, GPU_check = False):
         if self.descriptor == 'brisk':
-            detector = cv2.BRISK_create(thresh=thresh)
+            detector = cv2.cuda.BRISK_create(thresh=thresh) if GPU_check else cv2.BRISK_create(thresh=thresh)
         elif self.descriptor == 'sift':
-            detector = cv2.xfeatures2d.SIFT_create()
+            detector = cv2.cuda.SIFT_create() if GPU_check else cv2.xfeatures2d.SIFT_create()
         elif self.descriptor == 'orb':
-            detector = cv2.ORB_create()
+            detector = cv2.cuda_ORB.create() if GPU_check else cv2.ORB_create()
         else:
             raise SystemExit('{} is invalid descriptor information.\n\
                 Please write the correct descriptor.'.format(self.descriptor))
 
-        kp1, des1 = detector.detectAndCompute(self.gray_img[0], None)
-        kp2, des2 = detector.detectAndCompute(self.gray_img[1], None)
+        kp1, des1 = detector.detectAndCompute(cv2.cuda_GpuMat(self.gray_img[0]) if GPU_check else self.gray_img[0], None)
+        kp2, des2 = detector.detectAndCompute(cv2.cuda_GpuMat(self.gray_img[1]) if GPU_check else self.gray_img[1], None)
         
         self.keypoints= [(kp1, des1), (kp2, des2)]
         if (self.feature_matcher == 'flann') & (self.descriptor != 'orb'):
-            self.keypoints= [(kp1, np.float32(des1)), (kp2, np.float32(des2))]
+            self.keypoints= [(kp1, np.float64(des1)), (kp2, np.float64(des2))]
 
 
     def Matcher(self):
@@ -93,11 +93,11 @@ class image_registration:
                 Please write the correct match.'.format(self.mathcing_func))
         if len(good_matches)>=self.MIN_MATCH_COUNT:
             if t_acc_check: print('acc : {:0.2f}%'.format(len(good_matches)/len(matches)*100))
-            src_pts = np.float32([self.keypoints[0][0][m.queryIdx].pt for m in good_matches ])
-            dst_pts = np.float32([self.keypoints[1][0][m.trainIdx].pt for m in good_matches ])
+            src_pts = np.float64([self.keypoints[0][0][m.queryIdx].pt for m in good_matches ])
+            dst_pts = np.float64([self.keypoints[1][0][m.trainIdx].pt for m in good_matches ])
             mtrx, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
             h,w = self.gray_img[0].shape[:2]
-            pts = np.float32([ [[0,0]],[[0,h-1]],[[w-1,h-1]],[[w-1,0]] ])
+            pts = np.float64([ [[0,0]],[[0,h-1]],[[w-1,h-1]],[[w-1,0]] ])
             dst = cv2.perspectiveTransform(pts,mtrx)  
             self.dst = dst
         else:
@@ -105,16 +105,16 @@ class image_registration:
             raise SystemExit("Not enough matches are found - {}/{}\n{}".format(len(good_matches), self.MIN_MATCH_COUNT, self.query_path))
 
     def draw_Line_get_ConterPoint(self):
-        dst = np.int32(self.dst)
+        dst = np.int64(self.dst)
         self.source_img = cv2.polylines(self.source_img, [dst], True, 255,3, cv2.LINE_AA)
         center_point = (int((dst[0][0][0] + dst[2][0][0])/2), int((dst[0][0][1] + dst[2][0][1])/2))
         return center_point
 
-def run_image_registration(source_img, query_path, descriptor, feature_matcher, mathcing_func, t_acc_check = False):    
+def run_image_registration(source_img, query_path, descriptor, feature_matcher, mathcing_func, t_acc_check = False, GPU_check = False):    
     start = time.time()
     imgMatching = image_registration(source_img, query_path, descriptor, feature_matcher, mathcing_func)
     imgMatching.gray_scale()
-    imgMatching.description(60)
+    imgMatching.description(60, GPU_check)
     imgMatching.Matcher()
     imgMatching.feature_matching(t_acc_check)
     center_point = imgMatching.draw_Line_get_ConterPoint()

@@ -164,7 +164,8 @@ def detect(opt):
                 # image registration
                 centerPoint = []
                 for src_img_path in src_img:
-                    centerPoint.append(run_image_registration(im0, src_img_path, 'brisk', 'bf', 'knnmatch'))
+                    GPU_check = False if str(model.device) == 'cpu' else True
+                    centerPoint.append(run_image_registration(im0, src_img_path, 'brisk', 'bf', 'knnmatch', GPU_check = GPU_check))
                 srcImg_centerPoint = update_srcImg(centerPoint)
                 # Updating Frame Points
                 if frame_idx==0:
@@ -354,7 +355,7 @@ if __name__ == '__main__':
     img_registration_switch = True # 영상 정합 수행
     speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
     volume_switch = False           # 교통량 추출      (영상정합 필요)
-    Georeferencing_switch = False   # 지오레퍼런싱 (영상정합 필요)
+    Georeferencing_switch = True   # 지오레퍼런싱 (영상정합 필요)
 
     # Setting Parameters
     test_Video = 'DJI_0004' # 테스트 영상 이름
