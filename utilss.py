@@ -1,6 +1,11 @@
 import time
 import numpy as np
+from pyproj import Transformer
+from typing import Final
 
+PI: Final = np.pi
+d2r: Final = (PI / 180.)
+r2d: Final = (180. / PI)
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
 
 def compute_color_for_labels(label):
@@ -65,6 +70,27 @@ def is_cross_pt(x11,y11, x12,y12, x21,y21, x22,y22):
         return True
     else:
         return False
+
+def NormalizeAngle(fAngle):
+    while (fAngle < 0.): fAngle += 360.
+    while (fAngle >= 360.): fAngle -= 360.
+    if fAngle > 180.: fAngle -= 360.
+    return fAngle
+
+def point_angle(R1, R2):
+    return NormalizeAngle((PI/2. - np.arctan2(R1[1] - R2[1], R1[0] - R2[0])) * r2d)
+
+def lonlat_angle(R1, R2):
+    y = (R1[1] + R2[1]) / 2
+    fx = .011427 - y * 9.42572e-12
+    dx = fx * (R1[0] - R2[0])
+    dy = 9.29385e-3 * (R1[1] + R2[1])
+    return NormalizeAngle((PI/2. - np.arctan2(dy, dx)) * r2d)
+
+def CoordConv(x, y, src_crs='EPSG:32652', dst_crs='EPSG:4326'):
+    transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    lon, lat = transformer.transform(x, y)
+    return lon, lat
 
 # import sys
 # sys.path.append("..")

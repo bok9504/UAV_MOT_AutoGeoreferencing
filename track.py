@@ -41,8 +41,8 @@ def detect(opt):
         nosave, name, exist_ok, dnn, half, vid_stride, augment, classes, agnostic_nms, max_det, save_crop, line_thickness, save_conf, hide_labels, hide_conf, update, device, data, visualize, save_label = \
         opt.project, opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, opt.src_img, \
             opt.nosave, opt.name, opt.exist_ok, opt.dnn, opt.half, opt.vid_stride, opt.augment, opt.classes, opt.agnostic_nms, opt.max_det, opt.save_crop, opt.line_thickness, opt.save_conf, opt.hide_labels, opt.hide_conf, opt.update, opt.device, opt.data, opt.visualize, opt.save_label
-    yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch, Georeferencing_swch = \
-        opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.Georeferencing_swch
+    yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch, Georeferencing_swch, heading_swch = \
+        opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.Georeferencing_swch, opt.heading_swch
     webcam = source == '0' or source.startswith(
         'rtsp') or source.startswith('http') or source.endswith('.txt')
 
@@ -223,7 +223,7 @@ def detect(opt):
                             label = names[c] if hide_conf else f'{names[c]} {conf:.2f}'
                             annotator.box_label(xyxy, label, color=colors(c, True))
                     if save_crop:
-                        save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+                        save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True, gain=1, pad=0)
 
                 # draw detected boxes for visualization
                 if yolo_swch:
@@ -246,20 +246,13 @@ def detect(opt):
                 [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
                 ...]
                 """
-                # Calculates the Geo point for each vehicle
-                if Georeferencing_swch and img_registration_swch:
-                    geo_bbox = []
-                    for output in outputs:
-                        x_c, y_c = bbox_cc(output[0:4])
-                        geo_Cpoint = geo_transform * (y_c, x_c)
-                        geo_bbox.append(geo_Cpoint)
-
-                # draw tracked boxes for visualization
+                # TRACKING : Deepsort
                 if deepsort_swch and len(outputs) > 0:
                     bbox_xyxy = outputs[:, :4]
                     cls_id = outputs[:,4:5]
                     identities = outputs[:, -1]
                     track_result = Tracked_Obj(bbox_xyxy, cls_id, namess, identities, pts, volume if volume_swch else None)
+
                     # draw vehicle trajectory for visualization
                     if vehtrk_swch:
                         track_result.Visualize_Track(im0)
@@ -272,6 +265,13 @@ def detect(opt):
                     if volume_swch and img_registration_swch:
                         if frame_idx % 2 == 0:
                             volume = track_result.calc_Volume(Counter_list)
+                    # calculate GeoPoint Position for each vehicle
+                    if Georeferencing_swch and img_registration_swch:
+                        geo_bbox = track_result.calc_Geo_Position(geo_transform)
+                    # calculate heading for each vehicle
+                    if heading_swch and Georeferencing_swch and img_registration_swch:
+                        heading = track_result.calc_Heading(im0, geo_transform)
+                    # draw tracked boxes for visualization
                     track_result.set_label()
                     track_result.draw_box(im0)
 
@@ -291,10 +291,11 @@ def detect(opt):
                             geo_x = geo_bbox[j][0]
                             geo_y = geo_bbox[j][1]
                         else: geo_x = geo_y = -1
+                        hding = heading[j] if heading_swch and Georeferencing_swch else 0
                             
                         with open(txt_path, 'a') as f:
-                            f.write(('%g ' * 8 + '%f ' * 2 + '\n') % (frame_idx, identity, bbox_left,
-                                                           bbox_top, bbox_right, bbox_down, cls_id, spd, geo_x, geo_y))  # label format
+                            f.write(('%g ' * 8 + '%f ' * 2 + '%g ' + '\n') % (frame_idx, identity, bbox_left,
+                                                           bbox_top, bbox_right, bbox_down, cls_id, spd, geo_x, geo_y, hding))  # label format
 
             else:
                 deepsort.increment_ages()
@@ -356,11 +357,12 @@ if __name__ == '__main__':
     speed_switch = True            # 차량별 속도 추출 (영상정합 필요)
     volume_switch = False           # 교통량 추출      (영상정합 필요)
     Georeferencing_switch = True   # 지오레퍼런싱 (영상정합 필요)
+    heading_switch = True           # 헤딩값 추출
 
     # Setting Parameters
     test_Video = 'DJI_0004' # 테스트 영상 이름
     video_Ext = '.MOV'      # 테스트 영상 확장자
-    exp_num = 'exp_230720' # 실험 이름
+    exp_num = 'exp_230728' # 실험 이름
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
     test_Video_path = 'data/input_video/' + test_Video + video_Ext  # 테스트할 영상 경로 입력
@@ -413,7 +415,7 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--line-thickness', default=3, type=int, help='bounding box thickness (pixels)')
     parser.add_argument('--hide-labels', default=True, action='store_true', help='hide labels')
-    parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
+    parser.add_argument('--hide-conf', default=True, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--vid-stride', type=int, default=1, help='video frame-rate stride')
@@ -427,6 +429,7 @@ if __name__ == '__main__':
     parser.add_argument("--speed_swch", default=speed_switch, help='Speed on & off')
     parser.add_argument("--volume_swch", default=volume_switch, help='Volume on & off')
     parser.add_argument("--Georeferencing_swch", default=Georeferencing_switch, help='Georeferencing on & off')
+    parser.add_argument("--heading_swch", default=heading_switch, help='Heading on & off')
     args = parser.parse_args()
     args.img_size = check_img_size(args.img_size)
     print(args)

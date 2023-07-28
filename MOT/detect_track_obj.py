@@ -1,8 +1,8 @@
 import numpy as np
 import cv2
 
-from utilss import compute_color_for_labels
-from utilss import is_cross_pt
+from utilss import compute_color_for_labels, is_cross_pt
+from utilss import PI, d2r, point_angle, CoordConv
 
 class Obj_info:
     def __init__(self, bbox, cls, namess):
@@ -10,6 +10,7 @@ class Obj_info:
         self.cls = cls
         self.label = []
         self.namess = namess
+        self.geo_bbox = []
 
     # Draw Vehicle bounding boxes
     def draw_box(self, img, offset=(0,0)):
@@ -27,6 +28,14 @@ class Obj_info:
                 img, (x1 + t_size[0] + 3, y1 - (t_size[1] + 4)), (x1, y1), color, -1)
             cv2.putText(img, self.label[i], (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [255,255,255], 2)
         return img
+    
+    # GeoPoint Position calculation
+    def calc_Geo_Position(self, geo_transform):
+        for box in self.bbox:
+            center = (int(((box[0]) + (box[2]))/2), int(((box[1]) + (box[3]))/2))
+            geo_Cpoint = geo_transform * (center[1], center[0])
+            self.geo_bbox.append(geo_Cpoint)
+        return self.geo_bbox
 
 class Detected_Obj(Obj_info):
     def __init__(self, bbox, cls, namess, confs):
@@ -46,6 +55,7 @@ class Tracked_Obj(Obj_info):
         self.id = id
         self.speed = []
         self.volume = volume
+        self.heading = []
         # Create the list of center points
         self.pts = pts
         for i, box in enumerate(self.bbox):
@@ -125,3 +135,23 @@ class Tracked_Obj(Obj_info):
                         self.volume[cntIdx][self.cls[i]] += 1
                         self.volume[cntIdx][-1] += 1
         return self.volume
+    
+    # vehicle heading calculation
+    def calc_Heading(self, img, geo_transform, threshold=20, minLineLength=10):
+        for box in self.bbox:
+            box_img = img[box[1]:box[3], box[0]:box[2]]
+            edges = cv2.Canny(box_img, 50, 150, apertureSize=3)
+            lines = cv2.HoughLinesP(edges, 1, d2r, threshold=threshold, minLineLength=minLineLength, maxLineGap=10)
+
+            angles = []
+            if lines is not None:
+                for line in lines:
+                    _x1, _y1, _x2, _y2 = line[0]
+                    geo_point1 = geo_transform * (_y1, _x1)
+                    geo_point2 = geo_transform * (_y2, _x2)
+                    angles.append(point_angle(CoordConv(geo_point1[0], geo_point1[1]), CoordConv(geo_point2[0], geo_point2[1])))
+                angles = np.array(angles)
+                heading_angle = np.median(angles)
+            else: heading_angle = 0
+            self.heading.append(heading_angle)
+        return self.heading
