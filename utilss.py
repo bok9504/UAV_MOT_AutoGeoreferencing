@@ -2,6 +2,7 @@ import time
 import numpy as np
 from pyproj import Transformer
 from typing import Final
+from sklearn.cluster import DBSCAN
 
 PI: Final = np.pi
 d2r: Final = (PI / 180.)
@@ -91,6 +92,19 @@ def CoordConv(x, y, src_crs='EPSG:32652', dst_crs='EPSG:4326'):
     transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
     lon, lat = transformer.transform(x, y)
     return lon, lat
+
+def DBSCAN_clustering(angle_values, epsilon, min_samples):
+    """
+    DBSCAN을 이용한 클러스터링 함수
+    :param angle_values: 각도값이 들어있는 1차원 리스트
+    :param epsilon: 클러스터의 반경 범위
+    :param min_samples: 클러스터링을 위한 최소 샘플 개수
+    :return: 클러스터의 레이블
+    """
+    data = np.array(angle_values).reshape(-1, 1)
+    dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
+    cluster_labels = dbscan.fit_predict(data)
+    return cluster_labels
 
 # import sys
 # sys.path.append("..")

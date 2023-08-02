@@ -1,8 +1,9 @@
 import numpy as np
 import cv2
+from collections import Counter, deque
 
 from utilss import compute_color_for_labels, is_cross_pt
-from utilss import PI, d2r, point_angle, CoordConv
+from utilss import PI, d2r, NormalizeAngle, point_angle, CoordConv, DBSCAN_clustering
 
 class Obj_info:
     def __init__(self, bbox, cls, namess):
@@ -56,6 +57,8 @@ class Tracked_Obj(Obj_info):
         self.speed = []
         self.volume = volume
         self.heading = []
+        self.track_heading = []
+        self.flag_drive = [deque(maxlen=200) for _ in range(10000)]
         # Create the list of center points
         self.pts = pts
         for i, box in enumerate(self.bbox):
@@ -117,6 +120,7 @@ class Tracked_Obj(Obj_info):
                 geo_prevLoc = geo_transform * (prevLoc[1], prevLoc[0])
                 geo_curLoc = geo_transform * (curLoc[1], curLoc[0])
                 geoMove_len = np.sqrt( pow(geo_prevLoc[0] - geo_curLoc[0], 2) + pow(geo_prevLoc[1] - geo_curLoc[1], 2) )    # Moving length in video frame
+                self.track_heading.append(point_angle(CoordConv(geo_prevLoc[0], geo_prevLoc[1]), CoordConv(geo_curLoc[0], geo_curLoc[1])))
                 self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / (frmIdx+1))
         return self.speed
 
@@ -138,11 +142,25 @@ class Tracked_Obj(Obj_info):
     
     # vehicle heading calculation
     def calc_Heading(self, img, geo_transform, threshold=20, minLineLength=10):
-        for box in self.bbox:
+        '''
+        헤딩 추정 코드
+        1. 허프 선 변환 기반 각도 추정
+         - 차량 객체 바운딩박스 내 허프 선 변환 통해 직선의 각도 검출
+         - DBSCAN 클러스터링을 통해 각도값 군집 도출 이후, 최대 군집의 중앙값을 헤딩값 사용
+        2. 주행방향 기반 헤딩값 보정
+         - 주행 방향을 기반으로 반대 헤딩값 보정 수행
+          1) 주행중 객체 (speed 10km/h 이상)
+           - if 주행방향과 헤딩값 차이가 +- 20 이하: *=-1
+          2) 정지 객체 (speed 10km/h 이하)
+           - 주행기록x => pass, 주행기록o => 이전 헤딩값 사용
+        3. 가우시안 스무딩
+         - 누적 데이터 기반 가우시안 스무딩 수행
+        '''
+        for i, box in enumerate(self.bbox):
             box_img = img[box[1]:box[3], box[0]:box[2]]
+            # 허프 선 변환 각도 검출
             edges = cv2.Canny(box_img, 50, 150, apertureSize=3)
             lines = cv2.HoughLinesP(edges, 1, d2r, threshold=threshold, minLineLength=minLineLength, maxLineGap=10)
-
             angles = []
             if lines is not None:
                 for line in lines:
@@ -151,7 +169,31 @@ class Tracked_Obj(Obj_info):
                     geo_point2 = geo_transform * (_y2, _x2)
                     angles.append(point_angle(CoordConv(geo_point1[0], geo_point1[1]), CoordConv(geo_point2[0], geo_point2[1])))
                 angles = np.array(angles)
+                # 클러스터링을 통한 각도 필터링
+                cluster_labels = DBSCAN_clustering(angles, epsilon = 10, min_samples = 3)   
+                angle_num = Counter(cluster_labels)
+                if angle_num.most_common()[0][0] != -1:
+                    angle_num_value = angle_num.most_common()[0][0]
+                else:
+                    if len(angle_num.most_common()) > 1: angle_num_value = angle_num.most_common()[1][0]
+                    else: angle_num_value = angle_num.most_common()[0][0]
+                angle_labels = cluster_labels == angle_num_value
+                angles = angles[angle_labels]
                 heading_angle = np.median(angles)
             else: heading_angle = 0
+            # 반대 헤딩값 보정 len(veh_speed)!=0
+            # if len(self.speed) != 0:
+            #     if self.speed[i] != None and self.speed[i] >= 10:
+            #         nor_angle = NormalizeAngle(self.track_heading[i] - heading_angle)
+            #         if nor_angle >= -10 and nor_angle <= 10: heading_angle *= -1
+            #         if len(self.flag_drive[self.id[i]]) == 0: 
+            #             self.flag_drive[self.id[i]].append(1)
+            #             self.flag_drive[self.id[i]].append(heading_angle)
+            #         else: 
+            #             self.flag_drive[self.id[i]].pop()
+            #             self.flag_drive[self.id[i]].append(heading_angle)
+            #     else:
+            #         if len(self.flag_drive[self.id[i]]) == 2 and self.flag_drive[self.id[i]][0] == 1:
+            #             heading_angle = self.flag_drive[self.id[i]][1]
             self.heading.append(heading_angle)
         return self.heading

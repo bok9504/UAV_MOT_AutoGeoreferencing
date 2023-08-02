@@ -16,3 +16,4 @@ haversine
 rasterio
 requests
 pyproj
+scikit-learn
