@@ -99,4 +99,5 @@ def get_control_point(test_Video):
         else:
             pass
     else:
+        os.makedirs('data/data_setting/control_point/' + test_Video + '/')
         create_control_point(first_frm, control_point_file, control_point_img)
