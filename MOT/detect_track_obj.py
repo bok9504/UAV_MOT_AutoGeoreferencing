@@ -89,31 +89,35 @@ class Tracked_Obj(Obj_info):
         return img
 
     # vehicle speed calculation
-    def calc_Vehicle_Speed(self, vid_cap, dist_ratio, spd_interval): # set fps using spd_interval
+    def calc_Vehicle_Speed(self, FPS, dist_ratio, spd_interval): # set fps using spd_interval
+        if FPS != 30: spd_term = 1
+        else: spd_term = 3
         for i in range(len(self.id)):
             ptss = self.pts[self.id[i]].copy()
             curLoc = ptss.pop()
             ptss.reverse()
             if len(ptss) != 0:
                 for frmIdx, prevLoc in enumerate(ptss):
-                    if ((frmIdx+1)%(3*spd_interval)==0) & (prevLoc != None):break    # Get previous vehicle location and frame index
+                    if ((frmIdx+1)%(spd_term*spd_interval)==0) & (prevLoc != None):break    # Get previous vehicle location and frame index
                 if frmIdx + 1 == len(ptss):   # Case of None previous vehicle location
                     self.speed.append(None)
                     continue
                 frmMove_len = np.sqrt( pow(prevLoc[0] - curLoc[0], 2) + pow(prevLoc[1] - curLoc[1], 2) )    # Moving length in video frame
                 geoMove_len = frmMove_len * dist_ratio      # Moving length in geo
-                self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / (frmIdx+1))
+                self.speed.append(geoMove_len * FPS * 3.6 / (frmIdx+1))
         return self.speed
 
     # vehicle speed calculation based on Georeferencing
-    def geo_Vehicle_Speed(self, vid_cap, geo_transform, spd_interval): # set fps using spd_interval
+    def geo_Vehicle_Speed(self, FPS, geo_transform, spd_interval): # set fps using spd_interval
+        if FPS != 30: spd_term = 1
+        else: spd_term = 3
         for i in range(len(self.id)):
             ptss = self.pts[self.id[i]].copy()
             curLoc = ptss.pop()
             ptss.reverse()
             if len(ptss) != 0:
                 for frmIdx, prevLoc in enumerate(ptss):
-                    if ((frmIdx+1)%(3*spd_interval)==0) & (prevLoc != None):break    # Get previous vehicle location and frame index
+                    if ((frmIdx+1)%(spd_term*spd_interval)==0) & (prevLoc != None):break    # Get previous vehicle location and frame index
                 if frmIdx + 1 == len(ptss):   # Case of None previous vehicle location
                     self.speed.append(None)
                     continue
@@ -121,7 +125,7 @@ class Tracked_Obj(Obj_info):
                 geo_curLoc = geo_transform * (curLoc[1], curLoc[0])
                 geoMove_len = np.sqrt( pow(geo_prevLoc[0] - geo_curLoc[0], 2) + pow(geo_prevLoc[1] - geo_curLoc[1], 2) )    # Moving length in video frame
                 self.track_heading.append(point_angle(CoordConv(geo_prevLoc[0], geo_prevLoc[1]), CoordConv(geo_curLoc[0], geo_curLoc[1])))
-                self.speed.append(geoMove_len * vid_cap.get(cv2.CAP_PROP_FPS) * 3.6 / (frmIdx+1))
+                self.speed.append(geoMove_len * FPS * 3.6 / (frmIdx+1))
         return self.speed
 
     # traffic volume calculation
@@ -181,19 +185,20 @@ class Tracked_Obj(Obj_info):
                 angles = angles[angle_labels]
                 heading_angle = np.median(angles)
             else: heading_angle = 0
-            # 반대 헤딩값 보정 len(veh_speed)!=0
-            # if len(self.speed) != 0:
-            #     if self.speed[i] != None and self.speed[i] >= 10:
-            #         nor_angle = NormalizeAngle(self.track_heading[i] - heading_angle)
-            #         if nor_angle >= -10 and nor_angle <= 10: heading_angle *= -1
-            #         if len(self.flag_drive[self.id[i]]) == 0: 
-            #             self.flag_drive[self.id[i]].append(1)
-            #             self.flag_drive[self.id[i]].append(heading_angle)
-            #         else: 
-            #             self.flag_drive[self.id[i]].pop()
-            #             self.flag_drive[self.id[i]].append(heading_angle)
-            #     else:
-            #         if len(self.flag_drive[self.id[i]]) == 2 and self.flag_drive[self.id[i]][0] == 1:
-            #             heading_angle = self.flag_drive[self.id[i]][1]
+            
+            # 반대 헤딩값 보정
+            if len(self.speed) != 0:
+                if self.speed[i] != None and self.speed[i] >= 5:
+                    nor_angle = NormalizeAngle(self.track_heading[i] - heading_angle)
+                    if nor_angle >= -10 and nor_angle <= 10: heading_angle = NormalizeAngle(heading_angle + 180)
+                    if len(self.flag_drive[self.id[i]]) == 0: 
+                        self.flag_drive[self.id[i]].append(1)
+                        self.flag_drive[self.id[i]].append(heading_angle)
+                    else: 
+                        self.flag_drive[self.id[i]].pop()
+                        self.flag_drive[self.id[i]].append(heading_angle)
+                else:
+                    if len(self.flag_drive[self.id[i]]) == 2 and self.flag_drive[self.id[i]][0] == 1:
+                        heading_angle = self.flag_drive[self.id[i]][1]
             self.heading.append(heading_angle)
         return self.heading

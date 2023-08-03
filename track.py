@@ -24,6 +24,7 @@ from utilss import bbox_ccwh
 from utilss import bbox_cc
 from utilss import bbox_ltrd
 
+import math
 import argparse
 import platform
 import yaml
@@ -38,9 +39,9 @@ import torch.backends.cudnn as cudnn
 
 def detect(opt):
     project, source, weights, view_img, save_txt, imgsz, src_img, \
-        nosave, name, exist_ok, dnn, half, vid_stride, augment, classes, agnostic_nms, max_det, save_crop, line_thickness, save_conf, hide_labels, hide_conf, update, device, data, visualize, save_label = \
+        nosave, name, exist_ok, dnn, half, vid_stride, augment, classes, agnostic_nms, max_det, save_crop, line_thickness, save_conf, hide_labels, hide_conf, update, device, data, visualize, save_label, FPS = \
         opt.project, opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, opt.src_img, \
-            opt.nosave, opt.name, opt.exist_ok, opt.dnn, opt.half, opt.vid_stride, opt.augment, opt.classes, opt.agnostic_nms, opt.max_det, opt.save_crop, opt.line_thickness, opt.save_conf, opt.hide_labels, opt.hide_conf, opt.update, opt.device, opt.data, opt.visualize, opt.save_label
+            opt.nosave, opt.name, opt.exist_ok, opt.dnn, opt.half, opt.vid_stride, opt.augment, opt.classes, opt.agnostic_nms, opt.max_det, opt.save_crop, opt.line_thickness, opt.save_conf, opt.hide_labels, opt.hide_conf, opt.update, opt.device, opt.data, opt.visualize, opt.save_label, opt.FPS
     yolo_swch, deepsort_swch, img_registration_swch, vehtrk_swch, speed_swch, volume_swch, Georeferencing_swch, heading_swch = \
         opt.yolo_swch, opt.deepsort_swch, opt.img_registration_swch, opt.vehtrk_swch, opt.speed_swch, opt.volume_swch, opt.Georeferencing_swch, opt.heading_swch
     webcam = source == '0' or source.startswith(
@@ -93,7 +94,7 @@ def detect(opt):
     namess = model.module.names if hasattr(model, 'module') else model.names
 
     # Create the list of center points using deque
-    from _collections import deque
+    from collections import deque
     pts = [deque(maxlen=200) for _ in range(10000)]
 
     # Get control point & counter point
@@ -114,224 +115,227 @@ def detect(opt):
     # Run inference
     model.warmup(imgsz=(1 if pt or model.triton else bs, 3, *imgsz))  # warmup
     seen, windows, dt = 0, [], (Profile(), Profile(), Profile())
-    
+
     for frame_idx, (path, im, im0s, vid_cap, s) in enumerate(dataset):
-        with dt[0]:
-            im = torch.from_numpy(im).to(model.device)
-            im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
-            im /= 255  # 0 - 255 to 0.0 - 1.0
-            if len(im.shape) == 3:
-                im = im[None]  # expand for batch dim
+        if FPS == math.ceil(vid_cap.get(cv2.CAP_PROP_FPS)): video_Term = 1      # 코드 리팩토링 필요
+        else: video_Term = int(math.ceil(vid_cap.get(cv2.CAP_PROP_FPS))/FPS)
+        if frame_idx % video_Term == 0:
+            with dt[0]:
+                im = torch.from_numpy(im).to(model.device)
+                im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
+                im /= 255  # 0 - 255 to 0.0 - 1.0
+                if len(im.shape) == 3:
+                    im = im[None]  # expand for batch dim
 
-        # Inference
-        with dt[1]:
-            visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
-            pred = model(im, augment=augment, visualize=visualize)
+            # Inference
+            with dt[1]:
+                visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
+                pred = model(im, augment=augment, visualize=visualize)
 
-        # NMS
-        with dt[2]:
-            pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
+            # NMS
+            with dt[2]:
+                pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
 
-        # Second-stage classifier (optional)
-        # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
+            # Second-stage classifier (optional)
+            # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
 
-        # Process detections
-        for det_idx, det in enumerate(pred):  # per image
-            seen += 1
-            if webcam:  # batch_size >= 1
-                p, im0, frame = path[det_idx], im0s[det_idx].copy(), dataset.count
-                s += f'{det_idx}: '
-            else:
-                p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
-            
-            p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # im.jpg
-            label_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
-            s += '%gx%g ' % im.shape[2:]  # print string
-            gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-            imc = im0.copy() if save_crop else im0  # for save_crop
-            annotator = Annotator(im0, line_width=line_thickness, example=str(names))
+            # Process detections
+            for det_idx, det in enumerate(pred):  # per image
+                seen += 1
+                if webcam:  # batch_size >= 1
+                    p, im0, frame = path[det_idx], im0s[det_idx].copy(), dataset.count
+                    s += f'{det_idx}: '
+                else:
+                    p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
+                
+                p = Path(p)  # to Path
+                save_path = str(save_dir / p.name)  # im.jpg
+                label_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
+                s += '%gx%g ' % im.shape[2:]  # print string
+                gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+                imc = im0.copy() if save_crop else im0  # for save_crop
+                annotator = Annotator(im0, line_width=line_thickness, example=str(names))
 
-            if speed_swch:
-                dist_ratio_list = []
-                for i in range(len(frm_point)):
-                    for j in range(i+1, len(geo_point)):
-                        dist_ratio_list.append(point_dist(geo_point[i],geo_point[j])/point_dist(frm_point[i],frm_point[j]))
-                dist_ratio = stats.trim_mean(dist_ratio_list, 0.25)
+                if speed_swch:
+                    dist_ratio_list = []
+                    for i in range(len(frm_point)):
+                        for j in range(i+1, len(geo_point)):
+                            dist_ratio_list.append(point_dist(geo_point[i],geo_point[j])/point_dist(frm_point[i],frm_point[j]))
+                    dist_ratio = stats.trim_mean(dist_ratio_list, 0.25)
 
-            # Frame Points update using image registration
-            if img_registration_swch:
-                # image registration
-                centerPoint = []
-                for src_img_path in src_img:
-                    GPU_check = False if str(model.device) == 'cpu' else True
-                    centerPoint.append(run_image_registration(im0, src_img_path, 'brisk', 'bf', 'knnmatch', GPU_check = GPU_check))
-                srcImg_centerPoint = update_srcImg(centerPoint)
-                # Updating Frame Points
-                if frame_idx==0:
-                    datum_dist_frm = srcImg_centerPoint.get_datum_distance(frm_point)
-                frm_point = srcImg_centerPoint.update_point(frm_point, datum_dist_frm)
-                for pointNum in range(len(frm_point)):
-                    im0 = cv2.circle(im0, frm_point[pointNum], 10, (0,0,0),-1)
-                # Updating Counters
-                if volume_swch:
+                # Frame Points update using image registration
+                if img_registration_swch:
+                    # image registration
+                    centerPoint = []
+                    for src_img_path in src_img:
+                        GPU_check = False if str(model.device) == 'cpu' else True
+                        centerPoint.append(run_image_registration(im0, src_img_path, 'brisk', 'bf', 'knnmatch', GPU_check = GPU_check))
+                    srcImg_centerPoint = update_srcImg(centerPoint)
+                    # Updating Frame Points
                     if frame_idx==0:
-                        datum_dist_cnt = srcImg_centerPoint.get_datum_distance(Counter_list)
-                    Counter_list = srcImg_centerPoint.update_point(Counter_list, datum_dist_cnt)
-                    for counter in Counter_list.values():
-                        im0 = cv2.line(im0, tuple(counter[0]), tuple(counter[1]), (0,0,0), 5,-1)
-                    for cntIdx in range(len(Counter_list)):
-                        cv2.putText(im0, 'count_{}_total : {}'.format(cntIdx+1, volume[cntIdx][-1]), (100+400*cntIdx, 110), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 0, 0), 2) # 카운팅 되는거 보이게
-                        cv2.putText(im0, 'count_{}_{} : {}'.format(cntIdx+1, namess[0], volume[cntIdx][0]), (100+400*cntIdx, 140), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
-                        cv2.putText(im0, 'count_{}_{} : {}'.format(cntIdx+1, namess[1], volume[cntIdx][1]), (100+400*cntIdx, 170), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
-                        cv2.putText(im0, 'count_{}_{} : {}'.format(cntIdx+1, namess[2], volume[cntIdx][2]), (100+400*cntIdx, 200), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
+                        datum_dist_frm = srcImg_centerPoint.get_datum_distance(frm_point)
+                    frm_point = srcImg_centerPoint.update_point(frm_point, datum_dist_frm)
+                    for pointNum in range(len(frm_point)):
+                        im0 = cv2.circle(im0, frm_point[pointNum], 10, (0,0,0),-1)
+                    # Updating Counters
+                    if volume_swch:
+                        if frame_idx==0:
+                            datum_dist_cnt = srcImg_centerPoint.get_datum_distance(Counter_list)
+                        Counter_list = srcImg_centerPoint.update_point(Counter_list, datum_dist_cnt)
+                        for counter in Counter_list.values():
+                            im0 = cv2.line(im0, tuple(counter[0]), tuple(counter[1]), (0,0,0), 5,-1)
+                        for cntIdx in range(len(Counter_list)):
+                            cv2.putText(im0, 'count_{}_total : {}'.format(cntIdx+1, volume[cntIdx][-1]), (100+400*cntIdx, 110), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 0, 0), 2) # 카운팅 되는거 보이게
+                            cv2.putText(im0, 'count_{}_{} : {}'.format(cntIdx+1, namess[0], volume[cntIdx][0]), (100+400*cntIdx, 140), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
+                            cv2.putText(im0, 'count_{}_{} : {}'.format(cntIdx+1, namess[1], volume[cntIdx][1]), (100+400*cntIdx, 170), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
+                            cv2.putText(im0, 'count_{}_{} : {}'.format(cntIdx+1, namess[2], volume[cntIdx][2]), (100+400*cntIdx, 200), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 2) # 카운팅 되는거 보이게
 
-            if len(det):
-                # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()
+                if len(det):
+                    # Rescale boxes from img_size to im0 size
+                    det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()
 
-                # Print results
-                for c in det[:, 5].unique():
-                    n = (det[:, 5] == c).sum()  # detections per class
-                    s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                    # Print results
+                    for c in det[:, 5].unique():
+                        n = (det[:, 5] == c).sum()  # detections per class
+                        s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
-                bbox_xywh = []
-                bbox_xyxy = []
-                confs = []
-                clss = []
+                    bbox_xywh = []
+                    bbox_xyxy = []
+                    confs = []
+                    clss = []
 
-                for *xyxy, conf, cls in reversed(det):
-                    # Adapt detections to deep sort input format
-                    x_c, y_c, bbox_w, bbox_h = bbox_ccwh(*xyxy)
-                    x_l, y_t, x_r, y_d = bbox_ltrd(*xyxy)
-                    obj = [x_c, y_c, bbox_w, bbox_h]
-                    objxyxy = [x_l, y_t, x_r, y_d]
-                    bbox_xywh.append(obj)
-                    bbox_xyxy.append(objxyxy)
-                    confs.append([conf.item()])
-                    clss.append([cls.item()])
-                    
-                    # Write results
-                    if save_label:  # Write to file
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                        with open(f'{label_path}.txt', 'a') as f:
-                            f.write(('%g ' * len(line)).rstrip() % line + '\n')
-                    if not hide_labels:
-                        if save_img or save_crop:  # Add bbox to image
-                            c = int(cls)  # integer class
-                            label = names[c] if hide_conf else f'{names[c]} {conf:.2f}'
-                            annotator.box_label(xyxy, label, color=colors(c, True))
-                    if save_crop:
-                        save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True, gain=1, pad=0)
+                    for *xyxy, conf, cls in reversed(det):
+                        # Adapt detections to deep sort input format
+                        x_c, y_c, bbox_w, bbox_h = bbox_ccwh(*xyxy)
+                        x_l, y_t, x_r, y_d = bbox_ltrd(*xyxy)
+                        obj = [x_c, y_c, bbox_w, bbox_h]
+                        objxyxy = [x_l, y_t, x_r, y_d]
+                        bbox_xywh.append(obj)
+                        bbox_xyxy.append(objxyxy)
+                        confs.append([conf.item()])
+                        clss.append([cls.item()])
+                        
+                        # Write results
+                        if save_label:  # Write to file
+                            xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                            line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
+                            with open(f'{label_path}.txt', 'a') as f:
+                                f.write(('%g ' * len(line)).rstrip() % line + '\n')
+                        if not hide_labels:
+                            if save_img or save_crop:  # Add bbox to image
+                                c = int(cls)  # integer class
+                                label = names[c] if hide_conf else f'{names[c]} {conf:.2f}'
+                                annotator.box_label(xyxy, label, color=colors(c, True))
+                        if save_crop:
+                            save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True, gain=1, pad=0)
 
-                # draw detected boxes for visualization
-                if yolo_swch:
-                    detect_result = Detected_Obj(bbox_xyxy, clss, namess, confs)
-                    detect_result.set_label()
-                    detect_result.draw_box(im0)
+                    # draw detected boxes for visualization
+                    if yolo_swch:
+                        detect_result = Detected_Obj(bbox_xyxy, clss, namess, confs)
+                        detect_result.set_label()
+                        detect_result.draw_box(im0)
 
-                xywhs = torch.Tensor(bbox_xywh)
-                confss = torch.Tensor(confs)
-                cls_ids = torch.Tensor(clss)
+                    xywhs = torch.Tensor(bbox_xywh)
+                    confss = torch.Tensor(confs)
+                    cls_ids = torch.Tensor(clss)
 
-                # Pass detections to deepsort
-                outputs = deepsort.update(xywhs, confss, cls_ids, im0)
-                """
-                # outputs shape
+                    # Pass detections to deepsort
+                    outputs = deepsort.update(xywhs, confss, cls_ids, im0)
+                    """
+                    # outputs shape
 
-                [[박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
-                [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
-                [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
-                [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
-                ...]
-                """
-                # TRACKING : Deepsort
-                if deepsort_swch and len(outputs) > 0:
-                    bbox_xyxy = outputs[:, :4]
-                    cls_id = outputs[:,4:5]
-                    identities = outputs[:, -1]
-                    track_result = Tracked_Obj(bbox_xyxy, cls_id, namess, identities, pts, volume if volume_swch else None)
+                    [[박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
+                    [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
+                    [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
+                    [박스 좌측상단 x, 박스 좌측상단 y, 박스 우측하단 x, 박스 우측하단 y, 클래스 넘버, 차량 id],
+                    ...]
+                    """
+                    # TRACKING : Deepsort
+                    if deepsort_swch and len(outputs) > 0:
+                        bbox_xyxy = outputs[:, :4]
+                        cls_id = outputs[:,4:5]
+                        identities = outputs[:, -1]
+                        track_result = Tracked_Obj(bbox_xyxy, cls_id, namess, identities, pts, volume if volume_swch else None)
 
-                    # draw vehicle trajectory for visualization
-                    if vehtrk_swch:
-                        track_result.Visualize_Track(im0)
-                    # calculate vehicle speed
-                    if speed_swch and img_registration_swch and not Georeferencing_swch:
-                        veh_speed = track_result.calc_Vehicle_Speed(vid_cap, dist_ratio, 1)     # Frame interval 조절 가능
-                    elif speed_swch and img_registration_swch and Georeferencing_swch:
-                        veh_speed = track_result.geo_Vehicle_Speed(vid_cap, geo_transform, 1)   # Frame interval 조절 가능
-                    # calculate vehicle volume
-                    if volume_swch and img_registration_swch:
-                        if frame_idx % 2 == 0:
-                            volume = track_result.calc_Volume(Counter_list)
-                    # calculate GeoPoint Position for each vehicle
-                    if Georeferencing_swch and img_registration_swch:
-                        geo_bbox = track_result.calc_Geo_Position(geo_transform)
-                    # calculate heading for each vehicle
-                    if heading_swch and Georeferencing_swch and img_registration_swch:
-                        heading = track_result.calc_Heading(im0, geo_transform)
-                    # draw tracked boxes for visualization
-                    track_result.set_label()
-                    track_result.draw_box(im0)
-
-                # Write MOT compliant results to file
-                if save_txt and len(outputs) != 0:
-                    for j, output in enumerate(outputs):
-                        bbox_left = output[0]
-                        bbox_top = output[1]
-                        bbox_right = output[2]
-                        bbox_down = output[3]
-                        cls_id = output[4]
-                        identity = output[-1]
-                        if speed_swch and img_registration_swch and len(veh_speed)!=0 and veh_speed[j]!=None \
-                            and img_registration_swch: spd = veh_speed[j]
-                        else: spd = -1
+                        # draw vehicle trajectory for visualization
+                        if vehtrk_swch:
+                            track_result.Visualize_Track(im0)
+                        # calculate vehicle speed
+                        if speed_swch and img_registration_swch and not Georeferencing_swch:
+                            veh_speed = track_result.calc_Vehicle_Speed(FPS, dist_ratio, 1)     # Frame interval 조절 가능
+                        elif speed_swch and img_registration_swch and Georeferencing_swch:
+                            veh_speed = track_result.geo_Vehicle_Speed(FPS, geo_transform, 1)   # Frame interval 조절 가능
+                        # calculate vehicle volume
+                        if volume_swch and img_registration_swch:
+                            if frame_idx % 2 == 0:
+                                volume = track_result.calc_Volume(Counter_list)
+                        # calculate GeoPoint Position for each vehicle
                         if Georeferencing_swch and img_registration_swch:
-                            geo_x = geo_bbox[j][0]
-                            geo_y = geo_bbox[j][1]
-                        else: geo_x = geo_y = -1
-                        hding = heading[j] if heading_swch and Georeferencing_swch else 0
-                            
-                        with open(txt_path, 'a') as f:
-                            f.write(('%g ' * 8 + '%f ' * 2 + '%g ' + '\n') % (frame_idx, identity, bbox_left,
-                                                           bbox_top, bbox_right, bbox_down, cls_id, spd, geo_x, geo_y, hding))  # label format
+                            geo_bbox = track_result.calc_Geo_Position(geo_transform)
+                        # calculate heading for each vehicle
+                        if heading_swch and Georeferencing_swch and img_registration_swch:
+                            heading = track_result.calc_Heading(im0, geo_transform)
+                        # draw tracked boxes for visualization
+                        track_result.set_label()
+                        track_result.draw_box(im0)
 
-            else:
-                deepsort.increment_ages()
+                    # Write MOT compliant results to file
+                    if save_txt and len(outputs) != 0:
+                        for j, output in enumerate(outputs):
+                            bbox_left = output[0]
+                            bbox_top = output[1]
+                            bbox_right = output[2]
+                            bbox_down = output[3]
+                            cls_id = output[4]
+                            identity = output[-1]
+                            if speed_swch and img_registration_swch and len(veh_speed)!=0 and veh_speed[j]!=None \
+                                and img_registration_swch: spd = veh_speed[j]
+                            else: spd = -1
+                            if Georeferencing_swch and img_registration_swch:
+                                geo_x = geo_bbox[j][0]
+                                geo_y = geo_bbox[j][1]
+                            else: geo_x = geo_y = -1
+                            hding = heading[j] if heading_swch and Georeferencing_swch else 0
+                                
+                            with open(txt_path, 'a') as f:
+                                f.write(('%g ' * 8 + '%f ' * 2 + '%g ' + '\n') % (frame_idx, identity, bbox_left,
+                                                            bbox_top, bbox_right, bbox_down, cls_id, spd, geo_x, geo_y, hding))  # label format
 
-            # Stream results
-            im0 = annotator.result()
-            if view_img:
-                if platform.system() == 'Linux' and p not in windows:
-                    windows.append(p)
-                    cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
-                    cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
-                cv2.imshow(str(p), im0)
-                if cv2.waitKey(1) == ord('q'):  # q to quit
-                    raise StopIteration
+                else:
+                    deepsort.increment_ages()
 
-            # Save results (image with detections)
-            if save_img:
-                if dataset.mode == 'image':
-                    cv2.imwrite(save_path, im0)
-                else:  # 'video' or 'stream'
-                    if vid_path[det_idx] != save_path:  # new video
-                        vid_path[det_idx] = save_path
-                        if isinstance(vid_writer[det_idx], cv2.VideoWriter):
-                            vid_writer[det_idx].release()  # release previous video writer
-                        if vid_cap:  # video
-                            fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                            w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                            h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                        else:  # stream
-                            fps, w, h = 30, im0.shape[1], im0.shape[0]
-                        save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
-                        vid_writer[det_idx] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                    vid_writer[det_idx].write(im0)
-        
-        # Print time (inference-only)
-        LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{dt[1].dt * 1E3:.1f}ms")
+                # Stream results
+                im0 = annotator.result()
+                if view_img:
+                    if platform.system() == 'Linux' and p not in windows:
+                        windows.append(p)
+                        cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
+                        cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
+                    cv2.imshow(str(p), im0)
+                    if cv2.waitKey(1) == ord('q'):  # q to quit
+                        raise StopIteration
+
+                # Save results (image with detections)
+                if save_img:
+                    if dataset.mode == 'image':
+                        cv2.imwrite(save_path, im0)
+                    else:  # 'video' or 'stream'
+                        if vid_path[det_idx] != save_path:  # new video
+                            vid_path[det_idx] = save_path
+                            if isinstance(vid_writer[det_idx], cv2.VideoWriter):
+                                vid_writer[det_idx].release()  # release previous video writer
+                            if vid_cap:  # video
+                                fps = FPS
+                                w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                                h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            else:  # stream
+                                fps, w, h = FPS, im0.shape[1], im0.shape[0]
+                            save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
+                            vid_writer[det_idx] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+                        vid_writer[det_idx].write(im0)
+            
+            # Print time (inference-only)
+            LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{dt[1].dt * 1E3:.1f}ms")
     
     # Volume image save
     if volume_swch:
@@ -360,9 +364,10 @@ if __name__ == '__main__':
     heading_switch = True           # 헤딩값 추출
 
     # Setting Parameters
-    test_Video = 'DJI_0004' # 테스트 영상 이름
+    test_Video = 'intersection2_C-P_160_15_2' # 테스트 영상 이름
     video_Ext = '.MOV'      # 테스트 영상 확장자
-    exp_num = 'exp_230728' # 실험 이름
+    exp_num = 'exp_230803_heading' # 실험 이름
+    FPS_set = 10
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
     test_Video_path = 'data/input_video/' + test_Video + video_Ext  # 테스트할 영상 경로 입력
@@ -420,6 +425,7 @@ if __name__ == '__main__':
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--vid-stride', type=int, default=1, help='video frame-rate stride')
     parser.add_argument("--config_deepsort", type=str, default="MOT/deep_sort_pytorch/configs/deep_sort.yaml")
+    parser.add_argument("--FPS", default=FPS_set, help='video FPS setting')
     
     parser.add_argument("--src_img", default=Source_Img_path, help='Source Images path')
     parser.add_argument("--yolo_swch", default=yolo_switch, help='Yolo on & off')
