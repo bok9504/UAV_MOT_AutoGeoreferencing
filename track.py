@@ -175,6 +175,8 @@ def detect(opt):
                     if frame_idx==0:
                         datum_dist_frm = srcImg_centerPoint.get_datum_distance(frm_point)
                     frm_point = srcImg_centerPoint.update_point(frm_point, datum_dist_frm)
+                    gcps = [GCP(frm_point[x][0], frm_point[x][1], geo_point[x][0], geo_point[x][1]) for x in range(len(frm_point))]
+                    geo_transform = from_gcps(gcps)
                     for pointNum in range(len(frm_point)):
                         im0 = cv2.circle(im0, frm_point[pointNum], 10, (0,0,0),-1)
                     # Updating Counters
@@ -364,9 +366,9 @@ if __name__ == '__main__':
     heading_switch = True           # 헤딩값 추출
 
     # Setting Parameters
-    test_Video = 'intersection2_C-P_160_15_2' # 테스트 영상 이름
+    test_Video = 'DJI_0004' # 테스트 영상 이름
     video_Ext = '.MOV'      # 테스트 영상 확장자
-    exp_num = 'exp_230803_heading' # 실험 이름
+    exp_num = 'exp_230804_gcp' # 실험 이름
     FPS_set = 10
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
