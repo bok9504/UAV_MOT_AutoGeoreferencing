@@ -190,7 +190,7 @@ class Tracked_Obj(Obj_info):
             if len(self.speed) != 0:
                 if self.speed[i] != None and self.speed[i] >= 5:
                     nor_angle = NormalizeAngle(self.track_heading[i] - heading_angle)
-                    if nor_angle >= -10 and nor_angle <= 10: heading_angle = NormalizeAngle(heading_angle + 180)
+                    if nor_angle >= -5 and nor_angle <= 5: heading_angle = NormalizeAngle(heading_angle + 180)
                     if len(self.flag_drive[self.id[i]]) == 0: 
                         self.flag_drive[self.id[i]].append(1)
                         self.flag_drive[self.id[i]].append(heading_angle)
