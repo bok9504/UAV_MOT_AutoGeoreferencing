@@ -333,7 +333,7 @@ def detect(opt):
                             else:  # stream
                                 fps, w, h = FPS, im0.shape[1], im0.shape[0]
                             save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
-                            vid_writer[det_idx] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+                            vid_writer[det_idx] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'X264'), fps, (w, h))
                         vid_writer[det_idx].write(im0)
             
             # Print time (inference-only)
@@ -366,9 +366,9 @@ if __name__ == '__main__':
     heading_switch = True           # 헤딩값 추출
 
     # Setting Parameters
-    test_Video = 'DJI_0004' # 테스트 영상 이름
+    test_Video = 'intersection1_C_200_5_PHT' # 테스트 영상 이름
     video_Ext = '.MOV'      # 테스트 영상 확장자
-    exp_num = 'exp_230804_gcp' # 실험 이름
+    exp_num = 'exp_230822_deepsort' # 실험 이름
     FPS_set = 10
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
