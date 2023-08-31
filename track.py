@@ -169,7 +169,7 @@ def detect(opt):
                     centerPoint = []
                     for src_img_path in src_img:
                         GPU_check = False if str(model.device) == 'cpu' else True
-                        centerPoint.append(run_image_registration(im0, src_img_path, 'brisk', 'bf', 'knnmatch', GPU_check = GPU_check))
+                        centerPoint.append(run_image_registration(im0, src_img_path, 'brisk', 'bf', 'knnmatch', GPU_check = False)) # opencv cuda 수정필요
                     srcImg_centerPoint = update_srcImg(centerPoint)
                     # Updating Frame Points
                     if frame_idx==0:
@@ -368,7 +368,7 @@ if __name__ == '__main__':
     # Setting Parameters
     test_Video = 'intersection1_C_200_5_PHT' # 테스트 영상 이름
     video_Ext = '.MOV'      # 테스트 영상 확장자
-    exp_num = 'exp_230822_deepsort' # 실험 이름
+    exp_num = 'exp_230823_heading' # 실험 이름
     FPS_set = 10
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
