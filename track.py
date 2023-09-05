@@ -96,6 +96,7 @@ def detect(opt):
     # Create the list of center points using deque
     from collections import deque
     pts = [deque(maxlen=200) for _ in range(10000)]
+    flag_drive = [deque(maxlen=200) for _ in range(10000)]
 
     # Get control point & counter point
     if img_registration_swch:
@@ -229,6 +230,8 @@ def detect(opt):
                                 label = names[c] if hide_conf else f'{names[c]} {conf:.2f}'
                                 annotator.box_label(xyxy, label, color=colors(c, True))
                         if save_crop:
+                            c = int(cls)  # integer class
+                            label = names[c] if hide_conf else f'{names[c]} {conf:.2f}'
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True, gain=1, pad=0)
 
                     # draw detected boxes for visualization
@@ -257,7 +260,7 @@ def detect(opt):
                         bbox_xyxy = outputs[:, :4]
                         cls_id = outputs[:,4:5]
                         identities = outputs[:, -1]
-                        track_result = Tracked_Obj(bbox_xyxy, cls_id, namess, identities, pts, volume if volume_swch else None)
+                        track_result = Tracked_Obj(bbox_xyxy, cls_id, namess, identities, pts, flag_drive, volume if volume_swch else None)
 
                         # draw vehicle trajectory for visualization
                         if vehtrk_swch:
@@ -277,6 +280,7 @@ def detect(opt):
                         # calculate heading for each vehicle
                         if heading_swch and Georeferencing_swch and img_registration_swch:
                             heading = track_result.calc_Heading(im0, geo_transform)
+                            track_result.heading_draw_box(im0)
                         # draw tracked boxes for visualization
                         track_result.set_label()
                         track_result.draw_box(im0)
@@ -302,7 +306,6 @@ def detect(opt):
                             with open(txt_path, 'a') as f:
                                 f.write(('%g ' * 8 + '%f ' * 2 + '%g ' + '\n') % (frame_idx, identity, bbox_left,
                                                             bbox_top, bbox_right, bbox_down, cls_id, spd, geo_x, geo_y, hding))  # label format
-
                 else:
                     deepsort.increment_ages()
 
@@ -333,7 +336,7 @@ def detect(opt):
                             else:  # stream
                                 fps, w, h = FPS, im0.shape[1], im0.shape[0]
                             save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
-                            vid_writer[det_idx] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'X264'), fps, (w, h))
+                            vid_writer[det_idx] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'avc1'), fps, (w, h))
                         vid_writer[det_idx].write(im0)
             
             # Print time (inference-only)
@@ -368,7 +371,7 @@ if __name__ == '__main__':
     # Setting Parameters
     test_Video = 'intersection1_C_200_5_PHT' # 테스트 영상 이름
     video_Ext = '.MOV'      # 테스트 영상 확장자
-    exp_num = 'exp_230823_heading' # 실험 이름
+    exp_num = 'exp_230905_debug' # 실험 이름
     FPS_set = 10
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
