@@ -369,9 +369,9 @@ if __name__ == '__main__':
     heading_switch = True           # 헤딩값 추출
 
     # Setting Parameters
-    test_Video = 'intersection1_C_200_5_PHT' # 테스트 영상 이름
-    video_Ext = '.MOV'      # 테스트 영상 확장자
-    exp_num = 'exp_230905_debug' # 실험 이름
+    test_Video = 'intersection1_G_200_5_MVC' # 테스트 영상 이름
+    video_Ext = '.mp4'      # 테스트 영상 확장자
+    exp_num = 'exp_230908_debug' # 실험 이름
     FPS_set = 10
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'
