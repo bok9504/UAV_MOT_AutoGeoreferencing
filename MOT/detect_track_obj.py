@@ -215,7 +215,7 @@ class Tracked_Obj(Obj_info):
                     if len(self.flag_drive[self.id[i]]) == 3 and self.flag_drive[self.id[i]][0] == 1:
                         heading_angle = self.flag_drive[self.id[i]][1]
                         heading_angle_img = self.flag_drive[self.id[i]][2]
-            self.heading.append(heading_angle)
+            self.heading.append(NormalizeAngle(heading_angle + 45, False))
             self.heading_img.append(heading_angle_img)
         return self.heading
     

@@ -72,10 +72,10 @@ def is_cross_pt(x11,y11, x12,y12, x21,y21, x22,y22):
     else:
         return False
 
-def NormalizeAngle(fAngle):
+def NormalizeAngle(fAngle, bPositive = True):
     while (fAngle < 0.): fAngle += 360.
     while (fAngle >= 360.): fAngle -= 360.
-    #if fAngle > 180.: fAngle -= 360.
+    if (bPositive and fAngle > 180.): fAngle -= 360.
     return fAngle
 
 def point_angle(R1, R2):
