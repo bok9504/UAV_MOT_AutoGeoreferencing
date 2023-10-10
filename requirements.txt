@@ -1,5 +1,6 @@
 # pip install -r requirements.txt
 
+ultralytics==8.0.94
 matplotlib>=3.2.2
 numpy>=1.18.5
 pandas
@@ -18,4 +19,3 @@ requests
 pyproj
 scikit-learn
 psutil
-ultralytics
