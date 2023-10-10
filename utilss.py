@@ -72,14 +72,17 @@ def is_cross_pt(x11,y11, x12,y12, x21,y21, x22,y22):
     else:
         return False
 
-def NormalizeAngle(fAngle):
+def NormalizeAngle(fAngle, bPositive = True):
     while (fAngle < 0.): fAngle += 360.
     while (fAngle >= 360.): fAngle -= 360.
-    if fAngle > 180.: fAngle -= 360.
+    if (bPositive and fAngle >= 180.): fAngle -= 360.
     return fAngle
 
 def point_angle(R1, R2):
     return NormalizeAngle((PI/2. - np.arctan2(R1[1] - R2[1], R1[0] - R2[0])) * r2d)
+
+def image_angle(R1, R2):
+    return NormalizeAngle(np.arctan2(R1[1] - R2[1], R1[0] - R2[0]) * r2d)
 
 def lonlat_angle(R1, R2):
     y = (R1[1] + R2[1]) / 2
@@ -105,6 +108,13 @@ def DBSCAN_clustering(angle_values, epsilon, min_samples):
     dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
     cluster_labels = dbscan.fit_predict(data)
     return cluster_labels
+
+def Angle_append(angles):
+    arr = angles
+    if    len(arr[arr >= 0]) > len(arr[arr < 0]): arr = np.append(arr, np.median(arr[arr >= 0]))
+    elif  len(arr[arr >= 0]) < len(arr[arr < 0]): arr = np.append(arr, np.median(arr[arr < 0]))
+    else: arr = np.append(arr, np.median(arr[arr >= 0]))
+    return arr
 
 # import sys
 # sys.path.append("..")
