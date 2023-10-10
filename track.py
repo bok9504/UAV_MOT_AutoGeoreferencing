@@ -23,6 +23,7 @@ from Georeferencing.image_registration.update_source_Image import update_srcImg,
 from utilss import bbox_ccwh
 from utilss import bbox_cc
 from utilss import bbox_ltrd
+from utilss import NormalizeAngle
 
 import math
 import argparse
@@ -301,7 +302,7 @@ def detect(opt):
                                 geo_x = geo_bbox[j][0]
                                 geo_y = geo_bbox[j][1]
                             else: geo_x = geo_y = -1
-                            hding = heading[j] if heading_swch and Georeferencing_swch else 0
+                            hding = NormalizeAngle(heading[j], False) if heading_swch and Georeferencing_swch else 0
                                 
                             with open(txt_path, 'a') as f:
                                 f.write(('%g ' * 8 + '%f ' * 2 + '%g ' + '\n') % (frame_idx, identity, bbox_left,
@@ -371,7 +372,7 @@ if __name__ == '__main__':
     # Setting Parameters
     test_Video = 'intersection1_G_200_5_MVC' # 테스트 영상 이름
     video_Ext = '.mp4'      # 테스트 영상 확장자
-    exp_num = 'exp_230908_debug' # 실험 이름
+    exp_num = 'exp_231010_debug' # 실험 이름
     FPS_set = 10
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'

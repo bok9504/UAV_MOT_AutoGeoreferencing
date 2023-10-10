@@ -4,7 +4,7 @@ import cv2
 from collections import Counter
 
 from utilss import compute_color_for_labels, is_cross_pt
-from utilss import PI, d2r, NormalizeAngle, point_angle, CoordConv, DBSCAN_clustering
+from utilss import PI, d2r, NormalizeAngle, image_angle, CoordConv, DBSCAN_clustering, Angle_append
 
 class Obj_info:
     def __init__(self, bbox, cls, namess):
@@ -60,6 +60,7 @@ class Tracked_Obj(Obj_info):
         self.heading = []
         self.heading_img = []
         self.track_heading = []
+        self.track_heading_img = []
         self.flag_drive = flag_drive
         # Create the list of center points
         self.pts = pts
@@ -126,9 +127,10 @@ class Tracked_Obj(Obj_info):
                 geo_prevLoc = geo_transform * (prevLoc[1], prevLoc[0])
                 geo_curLoc = geo_transform * (curLoc[1], curLoc[0])
                 geoMove_len = np.sqrt( pow(geo_prevLoc[0] - geo_curLoc[0], 2) + pow(geo_prevLoc[1] - geo_curLoc[1], 2) )    # Moving length in video frame
-                track_dir = point_angle(CoordConv(geo_prevLoc[0], geo_prevLoc[1]), CoordConv(geo_curLoc[0], geo_curLoc[1]))
-                self.track_heading.append(NormalizeAngle(90 - track_dir))
-                # self.track_heading.append(NormalizeAngle(90 - point_angle((prevLoc[0], prevLoc[1]), (curLoc[0], curLoc[1]))))
+                track_dir = image_angle(CoordConv(geo_curLoc[0], geo_curLoc[1]), CoordConv(geo_prevLoc[0], geo_prevLoc[1]))
+                track_dir_img = image_angle((curLoc[0], curLoc[1]), (prevLoc[0], prevLoc[1]))                
+                self.track_heading.append(track_dir)
+                self.track_heading_img.append(track_dir_img)
                 self.speed.append(geoMove_len * FPS * 3.6 / (frmIdx+1))
         return self.speed
 
@@ -149,7 +151,7 @@ class Tracked_Obj(Obj_info):
         return self.volume
     
     # vehicle heading calculation
-    def calc_Heading(self, img, geo_transform, threshold=20, minLineLength=10):
+    def calc_Heading(self, img, geo_transform):
         '''
         헤딩 추정 코드
         1. 허프 선 변환 기반 각도 추정
@@ -164,9 +166,11 @@ class Tracked_Obj(Obj_info):
         '''
         for i, box in enumerate(self.bbox):
             box_img = img[box[1]:box[3], box[0]:box[2]]
+            minLength = int(max(box_img.shape)/2)
+
             # 허프 선 변환 각도 검출
             edges = cv2.Canny(box_img, 50, 150, apertureSize=3)
-            lines = cv2.HoughLinesP(edges, 1, d2r, threshold=threshold, minLineLength=minLineLength, maxLineGap=10)
+            lines = cv2.HoughLinesP(edges, 1, d2r, threshold=20, minLineLength=minLength, maxLineGap=10)
             angles = []
             angles_img = []
             if lines is not None:
@@ -174,12 +178,12 @@ class Tracked_Obj(Obj_info):
                     _x1, _y1, _x2, _y2 = line[0]
                     geo_point1 = geo_transform * (_y1, _x1)
                     geo_point2 = geo_transform * (_y2, _x2)
-                    angles.append(point_angle(CoordConv(geo_point1[0], geo_point1[1]), CoordConv(geo_point2[0], geo_point2[1])))
-                    angles_img.append(point_angle((_x1, _y1), (_x2, _y2)))
+                    angles.append(image_angle(CoordConv(geo_point1[1], geo_point1[0]), CoordConv(geo_point2[1], geo_point2[0])))
+                    angles_img.append(image_angle((_x1, _y1), (_x2, _y2)))
                 angles = np.array(angles)
                 angles_img = np.array(angles_img)
                 # 클러스터링을 통한 각도 필터링
-                cluster_labels = DBSCAN_clustering(angles, epsilon = 10, min_samples = 3)   
+                cluster_labels = DBSCAN_clustering(angles, epsilon = 2, min_samples = 3)
                 angle_num = Counter(cluster_labels)
                 if angle_num.most_common()[0][0] != -1:
                     angle_num_value = angle_num.most_common()[0][0]
@@ -189,8 +193,22 @@ class Tracked_Obj(Obj_info):
                 angle_labels = cluster_labels == angle_num_value
                 angles = angles[angle_labels]
                 angles_img = angles_img[angle_labels]
-                heading_angle = NormalizeAngle(90 - np.median(angles))
-                heading_angle_img = NormalizeAngle(90 - np.median(angles_img))
+
+                if (len(angles) % 2 == 0): angles = Angle_append(angles)
+                if (len(angles_img) % 2 == 0): angles_img = Angle_append(angles_img)
+
+                # 175 이상, -175 이하 각도 정규화 후 중앙값 계산 수행
+                if (max(angles) >= 175 and min(angles) < -175): 
+                    angles = np.vectorize(NormalizeAngle)(angles, False)
+                    heading_angle = np.median(angles)
+                else: heading_angle = NormalizeAngle(np.median(angles), False)
+                if (max(angles_img) >= 175 and min(angles_img) < -175): 
+                    angles_img = np.vectorize(NormalizeAngle)(angles_img, False)
+                    heading_angle_img = np.median(angles_img)
+                else: heading_angle_img = NormalizeAngle(np.median(angles_img), False)
+
+                # heading_angle = np.median(angles)
+                # heading_angle_img = np.median(angles_img)
             else: 
                 heading_angle = 0
                 heading_angle_img = 0
@@ -198,10 +216,12 @@ class Tracked_Obj(Obj_info):
             # 반대 헤딩값 보정
             if len(self.speed) != 0:
                 if self.speed[i] != None and self.speed[i] >= 8:
-                    nor_angle = NormalizeAngle(self.track_heading[i] - heading_angle)
-                    if nor_angle >= -45 and nor_angle <= 45: 
-                        heading_angle = NormalizeAngle(heading_angle + 180)
-                        heading_angle_img = NormalizeAngle(heading_angle_img + 180)
+                    nor_angle = NormalizeAngle(self.track_heading[i], False) - NormalizeAngle(heading_angle, False)
+                    nor_angle_img = NormalizeAngle(self.track_heading_img[i], False) - NormalizeAngle(heading_angle_img, False)
+                    if nor_angle >= 135 or nor_angle <= -135:   # +-45도 기준
+                        heading_angle = NormalizeAngle(heading_angle + 180, False)
+                    if nor_angle_img >= 135 or nor_angle_img <= -135:   # +-45도 기준
+                        heading_angle_img = NormalizeAngle(heading_angle_img + 180, False)
                     if len(self.flag_drive[self.id[i]]) == 0: 
                         self.flag_drive[self.id[i]].append(1)
                         self.flag_drive[self.id[i]].append(heading_angle)
@@ -212,10 +232,10 @@ class Tracked_Obj(Obj_info):
                         self.flag_drive[self.id[i]].append(heading_angle)
                         self.flag_drive[self.id[i]].append(heading_angle_img)
                 else:
-                    if len(self.flag_drive[self.id[i]]) == 3 and self.flag_drive[self.id[i]][0] == 1:
+                    if len(self.flag_drive[self.id[i]]) == 3 and self.flag_drive[self.id[i]][0] == 1: 
                         heading_angle = self.flag_drive[self.id[i]][1]
                         heading_angle_img = self.flag_drive[self.id[i]][2]
-            self.heading.append(NormalizeAngle(heading_angle + 45, False))
+            self.heading.append(heading_angle)
             self.heading_img.append(heading_angle_img)
         return self.heading
     
@@ -227,7 +247,8 @@ class Tracked_Obj(Obj_info):
             y1 += offset[1]
             y2 += offset[1]
 
-            radius = 100
+            radius = max(abs(x2 - x1), abs(y2 - y1))
+            
             center_x = int((x1+x2)/2)
             center_y = int((y1+y2)/2)
             angle_rad = math.radians(self.heading_img[i])
@@ -235,4 +256,10 @@ class Tracked_Obj(Obj_info):
             point_y = int(center_y + radius * math.sin(angle_rad))
 
             cv2.line(img, (center_x, center_y), (point_x, point_y), (0, 0, 255), 3)
+
+            angle_rad = math.radians(self.heading[i])
+            point_x = int(center_x + radius * math.cos(angle_rad))
+            point_y = int(center_y + radius * math.sin(angle_rad))
+
+            cv2.line(img, (center_x, center_y), (point_x, point_y), (0, 255, 0), 3)
         return img
