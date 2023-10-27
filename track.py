@@ -121,6 +121,7 @@ def detect(opt):
     for frame_idx, (path, im, im0s, vid_cap, s) in enumerate(dataset):
         if FPS == math.ceil(vid_cap.get(cv2.CAP_PROP_FPS)): video_Term = 1      # 코드 리팩토링 필요
         else: video_Term = int(math.ceil(vid_cap.get(cv2.CAP_PROP_FPS))/FPS)
+        vid_fps = vid_cap.get(cv2.CAP_PROP_FPS)
         if frame_idx % video_Term == 0:
             with dt[0]:
                 im = torch.from_numpy(im).to(model.device)
@@ -174,8 +175,7 @@ def detect(opt):
                         centerPoint.append(run_image_registration(im0, src_img_path, 'brisk', 'bf', 'knnmatch', GPU_check = False)) # opencv cuda 수정필요
                     srcImg_centerPoint = update_srcImg(centerPoint)
                     # Updating Frame Points
-                    if frame_idx==0:
-                        datum_dist_frm = srcImg_centerPoint.get_datum_distance(frm_point)
+                    if frame_idx==0: datum_dist_frm = srcImg_centerPoint.get_datum_distance(frm_point)
                     frm_point = srcImg_centerPoint.update_point(frm_point, datum_dist_frm)
                     gcps = [GCP(frm_point[x][0], frm_point[x][1], geo_point[x][0], geo_point[x][1]) for x in range(len(frm_point))]
                     geo_transform = from_gcps(gcps)
@@ -261,16 +261,16 @@ def detect(opt):
                         bbox_xyxy = outputs[:, :4]
                         cls_id = outputs[:,4:5]
                         identities = outputs[:, -1]
-                        track_result = Tracked_Obj(bbox_xyxy, cls_id, namess, identities, pts, flag_drive, volume if volume_swch else None)
+                        track_result = Tracked_Obj(frame_idx, bbox_xyxy, cls_id, namess, identities, pts, flag_drive, volume if volume_swch else None)
 
                         # draw vehicle trajectory for visualization
                         if vehtrk_swch:
                             track_result.Visualize_Track(im0)
                         # calculate vehicle speed
                         if speed_swch and img_registration_swch and not Georeferencing_swch:
-                            veh_speed = track_result.calc_Vehicle_Speed(FPS, dist_ratio, 1)     # Frame interval 조절 가능
+                            veh_speed = track_result.calc_Vehicle_Speed(vid_fps, dist_ratio, 1)     # Frame interval 조절 가능
                         elif speed_swch and img_registration_swch and Georeferencing_swch:
-                            veh_speed = track_result.geo_Vehicle_Speed(FPS, geo_transform, 1)   # Frame interval 조절 가능
+                            veh_speed = track_result.geo_Vehicle_Speed(vid_fps, geo_transform, 1)   # Frame interval 조절 가능
                         # calculate vehicle volume
                         if volume_swch and img_registration_swch:
                             if frame_idx % 2 == 0:
@@ -281,7 +281,7 @@ def detect(opt):
                         # calculate heading for each vehicle
                         if heading_swch and Georeferencing_swch and img_registration_swch:
                             heading = track_result.calc_Heading(im0, geo_transform)
-                            track_result.heading_draw_box(im0)
+                            track_result.heading_draw_box(im0, bHeading = False, bHeading_img = True)
                         # draw tracked boxes for visualization
                         track_result.set_label()
                         track_result.draw_box(im0)
@@ -305,7 +305,7 @@ def detect(opt):
                             hding = NormalizeAngle(heading[j], False) if heading_swch and Georeferencing_swch else 0
                                 
                             with open(txt_path, 'a') as f:
-                                f.write(('%g ' * 8 + '%f ' * 2 + '%g ' + '\n') % (frame_idx, identity, bbox_left,
+                                f.write(('%g ' * 8 + '%f ' * 2 + '%g' + '\n') % (frame_idx, identity, bbox_left,
                                                             bbox_top, bbox_right, bbox_down, cls_id, spd, geo_x, geo_y, hding))  # label format
                 else:
                     deepsort.increment_ages()
@@ -370,9 +370,9 @@ if __name__ == '__main__':
     heading_switch = True           # 헤딩값 추출
 
     # Setting Parameters
-    test_Video = 'intersection1_G_200_5_MVC' # 테스트 영상 이름
+    test_Video = 'intersection1_C_200_5_PHT' # 테스트 영상 이름
     video_Ext = '.mp4'      # 테스트 영상 확장자
-    exp_num = 'exp_231010_debug' # 실험 이름
+    exp_num = 'exp_231011' # 실험 이름
     FPS_set = 10
 
     weights_path = 'MOT/yolov5/runs/train/yolov5_230717/weights/best.pt'

@@ -52,7 +52,7 @@ class Detected_Obj(Obj_info):
             self.label.append('{} {:.2f}%'.format(self.namess[clsss], confss))
 
 class Tracked_Obj(Obj_info):
-    def __init__(self, bbox, cls, namess, id, pts, flag_drive, volume):
+    def __init__(self, frame_idx, bbox, cls, namess, id, pts, flag_drive, volume):
         Obj_info.__init__(self, bbox, cls, namess)
         self.id = id
         self.speed = []
@@ -66,7 +66,7 @@ class Tracked_Obj(Obj_info):
         self.pts = pts
         for i, box in enumerate(self.bbox):
             center = (int(((box[0]) + (box[2]))/2), int(((box[1]) + (box[3]))/2))
-            self.pts[self.id[i]].append(center)
+            self.pts[self.id[i]].append((frame_idx, center))
         maxNum = max([len(self.pts[x]) for x in range(len(self.pts))])
         [self.pts[y].append(None) for y in range(len(self.pts)) if len(self.pts[y]) != maxNum]
 
@@ -88,11 +88,11 @@ class Tracked_Obj(Obj_info):
             while None in ptsTrk:
                 ptsTrk.remove(None)
             for j in range(1, len(ptsTrk)):
-                cv2.line(img, (ptsTrk[j-1]), (ptsTrk[j]), (0,255,255), 5)
+                cv2.line(img, (ptsTrk[j-1][1]), (ptsTrk[j][1]), (0,255,255), 5)
         return img
 
     # vehicle speed calculation
-    def calc_Vehicle_Speed(self, FPS, dist_ratio, spd_interval): # set fps using spd_interval
+    def calc_Vehicle_Speed(self, fps, dist_ratio, spd_interval): # set fps using spd_interval
         if FPS != 30: spd_term = 1
         else: spd_term = 3
         for i in range(len(self.id)):
@@ -100,38 +100,39 @@ class Tracked_Obj(Obj_info):
             curLoc = ptss.pop()
             ptss.reverse()
             if len(ptss) != 0:
-                for frmIdx, prevLoc in enumerate(ptss):
-                    if ((frmIdx+1)%(spd_term*spd_interval)==0) & (prevLoc != None):break    # Get previous vehicle location and frame index
-                if frmIdx + 1 == len(ptss):   # Case of None previous vehicle location
+                for prevLoc in ptss:
+                    if (prevLoc != None) and (curLoc[0] - prevLoc[0] >= 9):break    # Get previous vehicle location and frame index
+                if prevLoc == None:   # Case of None previous vehicle location
                     self.speed.append(None)
                     continue
-                frmMove_len = np.sqrt( pow(prevLoc[0] - curLoc[0], 2) + pow(prevLoc[1] - curLoc[1], 2) )    # Moving length in video frame
+                frmMove_len = np.sqrt( pow(prevLoc[1][0] - curLoc[1][0], 2) + pow(prevLoc[1][1] - curLoc[1][1], 2) )    # Moving length in video frame
                 geoMove_len = frmMove_len * dist_ratio      # Moving length in geo
-                self.speed.append(geoMove_len * FPS * 3.6 / (frmIdx+1))
+                self.speed.append(geoMove_len * fps * 3.6 / (curLoc[0] - prevLoc[0]))
+            else: self.speed.append(None)
         return self.speed
 
     # vehicle speed calculation based on Georeferencing
-    def geo_Vehicle_Speed(self, FPS, geo_transform, spd_interval): # set fps using spd_interval
-        if FPS != 30: spd_term = 1
-        else: spd_term = 3
+    def geo_Vehicle_Speed(self, fps, geo_transform, spd_interval): # set fps using spd_interval
         for i in range(len(self.id)):
-            ptss = self.pts[self.id[i]].copy()
+            ptss = self.pts[int(self.id[i])].copy()
             curLoc = ptss.pop()
             ptss.reverse()
             if len(ptss) != 0:
-                for frmIdx, prevLoc in enumerate(ptss):
-                    if ((frmIdx+1)%(spd_term*spd_interval)==0) & (prevLoc != None):break    # Get previous vehicle location and frame index
-                if frmIdx + 1 == len(ptss):   # Case of None previous vehicle location
+                for prevLoc in ptss:
+                    if (prevLoc != None) and (curLoc[0] - prevLoc[0] >= 9):break    # Get previous vehicle location and frame index
+                if prevLoc == None:   # Case of None previous vehicle location
                     self.speed.append(None)
+                    self.track_heading.append(None)
+                    self.track_heading_img.append(None)
                     continue
-                geo_prevLoc = geo_transform * (prevLoc[1], prevLoc[0])
-                geo_curLoc = geo_transform * (curLoc[1], curLoc[0])
+                geo_prevLoc = geo_transform * (prevLoc[1][1], prevLoc[1][0])
+                geo_curLoc = geo_transform * (curLoc[1][1], curLoc[1][0])
                 geoMove_len = np.sqrt( pow(geo_prevLoc[0] - geo_curLoc[0], 2) + pow(geo_prevLoc[1] - geo_curLoc[1], 2) )    # Moving length in video frame
-                track_dir = image_angle(CoordConv(geo_curLoc[0], geo_curLoc[1]), CoordConv(geo_prevLoc[0], geo_prevLoc[1]))
-                track_dir_img = image_angle((curLoc[0], curLoc[1]), (prevLoc[0], prevLoc[1]))                
+                track_dir = image_angle(CoordConv(geo_curLoc[1], geo_curLoc[0]), CoordConv(geo_prevLoc[1], geo_prevLoc[0]))
+                track_dir_img = image_angle((curLoc[1][0], curLoc[1][1]), (prevLoc[1][0], prevLoc[1][1]))                
                 self.track_heading.append(track_dir)
                 self.track_heading_img.append(track_dir_img)
-                self.speed.append(geoMove_len * FPS * 3.6 / (frmIdx+1))
+                self.speed.append(geoMove_len * fps * 3.6 / (curLoc[0] - prevLoc[0]))
         return self.speed
 
     # traffic volume calculation
@@ -206,9 +207,6 @@ class Tracked_Obj(Obj_info):
                     angles_img = np.vectorize(NormalizeAngle)(angles_img, False)
                     heading_angle_img = np.median(angles_img)
                 else: heading_angle_img = NormalizeAngle(np.median(angles_img), False)
-
-                # heading_angle = np.median(angles)
-                # heading_angle_img = np.median(angles_img)
             else: 
                 heading_angle = 0
                 heading_angle_img = 0
@@ -239,7 +237,7 @@ class Tracked_Obj(Obj_info):
             self.heading_img.append(heading_angle_img)
         return self.heading
     
-    def heading_draw_box(self, img, offset=(0,0)):
+    def heading_draw_box(self, img, bHeading = False, bHeading_img = False, offset=(0,0)):
         for i, box in enumerate(self.bbox):
             x1, y1, x2, y2 = [int(i) for i in box]
             x1 += offset[0]
@@ -248,18 +246,17 @@ class Tracked_Obj(Obj_info):
             y2 += offset[1]
 
             radius = max(abs(x2 - x1), abs(y2 - y1))
-            
             center_x = int((x1+x2)/2)
             center_y = int((y1+y2)/2)
-            angle_rad = math.radians(self.heading_img[i])
-            point_x = int(center_x + radius * math.cos(angle_rad))
-            point_y = int(center_y + radius * math.sin(angle_rad))
+            if bHeading:
+                angle_rad = math.radians(self.heading[i])
+                point_x = int(center_x + radius * math.cos(angle_rad))
+                point_y = int(center_y + radius * math.sin(angle_rad))
+                cv2.line(img, (center_x, center_y), (point_x, point_y), (0, 255, 0), 3)
+            if bHeading_img:
+                angle_rad = math.radians(self.heading_img[i])
+                point_x = int(center_x + radius * math.cos(angle_rad))
+                point_y = int(center_y + radius * math.sin(angle_rad))
+                cv2.line(img, (center_x, center_y), (point_x, point_y), (0, 0, 255), 3)
 
-            cv2.line(img, (center_x, center_y), (point_x, point_y), (0, 0, 255), 3)
-
-            angle_rad = math.radians(self.heading[i])
-            point_x = int(center_x + radius * math.cos(angle_rad))
-            point_y = int(center_y + radius * math.sin(angle_rad))
-
-            cv2.line(img, (center_x, center_y), (point_x, point_y), (0, 255, 0), 3)
         return img
